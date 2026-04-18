@@ -68,7 +68,7 @@ This directory structure is purposefully designed to scale gracefully into the f
 1. **Upload** (Done)
 2. **Parse** (Done)
 3. **Normalize** (Pending `services/normalization.py`)
-4. **JD Resolution** (Pending `services/jd_service.py`)
+4. **JD Resolution** (Pending `services/jd_service.py` using `trafilatura` for zero-shot URL extraction)
 5. **Grade** (Pending `services/llm_service.py` to bridge local Qwen 3)
 6. **Recommend** (Pending Domain traceability tagging logic)
 7. **Human Review** (Client side)

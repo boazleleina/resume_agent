@@ -5,7 +5,7 @@ A human-in-the-loop, AI-powered agent designed to parse your resume, compare it 
 ## Tech Stack
 * **Backend:** Python + FastAPI
 * **LLM Engine:** Local Ollama (Qwen 3 8B)
-* **Parsers:** `pdfplumber` (PDF), `python-docx` (Word)
+* **Parsers:** `pdfplumber` (PDF), `python-docx` (Word), `trafilatura` (Job Description Web Scraping)
 * **Architecture:** Domain-Driven Design (DDD) & Stateless processing for clean PDF generation and accurate iteration.
 * **Testing:** `pytest`
 
@@ -18,7 +18,7 @@ A human-in-the-loop, AI-powered agent designed to parse your resume, compare it 
 3. **Normalize:** Raw text is converted into a canonical `Resume JSON` (Single Source of Truth).
 4. **Job Description Resolution:** 
    - User inputs a JD via text or URL.
-   - Backend extracts and normalizes the job description into plain text.
+   - Backend extracts and normalizes the job description into plain text (using Trafilatura to algorithmically strip HTML noise without custom scrapers).
 5. **Grade:** The local Qwen 3 model compares the Canonical JSON against the JD. It outputs a strictly enforced JSON object containing: `score`, `strengths`, `weaknesses`, and `recommendations`.
 6. **Recommend:** Improvements are strictly limited to existing evidence or generic advice using Traceability Categories to prevent inventing metrics.
 7. **Human Review:** User reviews and approves/rejects proposed patches on the frontend.
