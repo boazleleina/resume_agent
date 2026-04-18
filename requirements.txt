@@ -5,3 +5,5 @@ pdfplumber
 python-docx
 pytest
 pydantic
+trafilatura
+httpx
