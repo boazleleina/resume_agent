@@ -44,4 +44,5 @@ class CanonicalResume(BaseModel):
     experience: List[ExperienceInfo] = Field(default_factory=list)
     education: List[EducationInfo] = Field(default_factory=list)
     projects: List[ProjectInfo] = Field(default_factory=list)
+    certifications: List[str] = Field(default_factory=list, description=VERBATIM_DESC)
     skills: ResumeSkills = Field(default_factory=ResumeSkills)

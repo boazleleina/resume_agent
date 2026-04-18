@@ -10,6 +10,7 @@ def test_new_grad_resume_defaults():
     assert resume.experience == []
     assert resume.education == []
     assert resume.projects == []
+    assert resume.certifications == []
     assert resume.skills.all_terms == []
     assert resume.metrics_found == []
     
