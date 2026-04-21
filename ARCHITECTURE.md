@@ -11,7 +11,7 @@ Hosts pure business logic, custom exceptions, and core data models independent o
 - `classification.py`: Pure heuristic algorithms (e.g., scoring text tokens) to reject letters of recommendation or cover letters from being processed as resumes.
 - `resume_models.py`: Pydantic canonical resume schema with VERBATIM/MUTABLE field annotations to prevent LLM hallucination.
 - `jd_models.py`: Pydantic schema for structured Job Description extraction (core requirements, tech stack, etc.).
-- `jd_parsing.py`: 4-layer JD extraction pipeline (JSON-LD → Trafilatura recall → BS4 heading walker → merge/dedupe).
+- `jd_parsing.py`: 4-layer JD extraction pipeline (JSON-LD -> Trafilatura recall -> BS4 heading walker -> merge/dedupe).
 
 ### 2. `parsers/`
 Handles text extraction decoupling.

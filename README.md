@@ -1,4 +1,4 @@
-# Resume Agent 🚀
+# Resume Agent
 
 A human-in-the-loop, AI-powered agent designed to parse your resume, compare it against a Job Description, and provide actionable, traceable patches to improve your resume—all strictly controlled to prevent LLM hallucination.
 
@@ -19,7 +19,7 @@ A human-in-the-loop, AI-powered agent designed to parse your resume, compare it 
 3. **Normalize:** Raw text is converted into a canonical `Resume JSON` (Single Source of Truth).
 4. **Job Description Resolution:** 
    - User inputs a JD via text or URL.
-   - Backend runs a 4-layer extraction pipeline: JSON-LD structured data → Trafilatura recall-mode → BeautifulSoup heading walker → merge & deduplicate. This ensures stacked headings and requirement lists are never dropped.
+   - Backend runs a 4-layer extraction pipeline: JSON-LD structured data -> Trafilatura recall-mode -> BeautifulSoup heading walker -> merge & deduplicate. This ensures stacked headings and requirement lists are never dropped.
 5. **Grade:** The local Qwen 3 model compares the Canonical JSON against the JD. It outputs a strictly enforced JSON object containing: `score`, `strengths`, `weaknesses`, and `recommendations`.
 6. **Recommend:** Improvements are strictly limited to existing evidence or generic advice using Traceability Categories to prevent inventing metrics.
 7. **Human Review:** User reviews and approves/rejects proposed patches on the frontend.
@@ -27,7 +27,7 @@ A human-in-the-loop, AI-powered agent designed to parse your resume, compare it 
 
 ---
 
-## 🔒 Data Governance & Hallucination Prevention
+## Data Governance & Hallucination Prevention
 To prevent hallucination, the agent uses strict Data governance. The model is **never** allowed to randomly rewrite the resume in one shot. It only proposes **patches**. 
 
 Every recommendation must evaluate to one of four traceability tracking tags:

@@ -7,7 +7,7 @@ All notable changes to the `resume_agent` project will be documented in this fil
 ### Added
 - `app/domain/resume_models.py` defining the strict Pydantic Canonical Resume schema (Stage 3).
 - `app/domain/jd_models.py` defining the Pydantic Job Description schema (`core_requirements`, `preferred_qualifications`, `tech_stack`).
-- `app/domain/jd_parsing.py` implementing a 4-layer JD extraction pipeline: JSON-LD → Trafilatura recall-mode → BeautifulSoup heading walker → merge & deduplicate.
+- `app/domain/jd_parsing.py` implementing a 4-layer JD extraction pipeline: JSON-LD -> Trafilatura recall-mode -> BeautifulSoup heading walker -> merge & deduplicate.
 - `app/services/jd_service.py` for secure URL fetching with SSRF protection, 5MB memory-safe streaming, and raw text cleanup (`html.unescape`, `\r\n` stripping).
 - `[POST] /process-jd/` endpoint exposed on FastAPI layer.
 - Strict Server-Side Request Forgery (SSRF) filtering blocking `localhost`, private IPs, and link-local addresses.
