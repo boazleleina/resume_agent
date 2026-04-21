@@ -1,4 +1,5 @@
 import httpx
+import html
 from app.domain.jd_parsing import is_valid_url, extract_text_from_html, JobDescriptionException
 
 # We want to protect against memory DoS, so if a payload exceeds 5MB, we sever the connection.
@@ -8,12 +9,14 @@ async def process_job_description(input_data: str) -> str:
     """
     Orchestrates Job Description resolution. 
     Checks if the input is a secure URL. If it is, fetches heavily constrained HTML bytes 
-    and uses Trafilatura to zero-shot extract it.
-    If it's raw text, returns it gracefully for downstream LLM processing.
+    and runs the 4-layer extraction pipeline.
+    If it's raw text, cleans browser artifacts and returns it for downstream LLM processing.
     """
     # 1. Fallback / Base Case: It's just raw text pasted by the user.
     if not is_valid_url(input_data):
-        return input_data.strip()
+        clean_raw = html.unescape(input_data)       # Convert &nbsp; → space
+        clean_raw = clean_raw.replace("\r\n", "\n")  # Strip Windows carriage returns
+        return clean_raw.strip()
 
     # 2. URL Case: Fetch it securely
     try:
