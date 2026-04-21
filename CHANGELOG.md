@@ -2,6 +2,15 @@
 
 All notable changes to the `resume_agent` project will be documented in this file.
 
+## [0.2.1] - 2026-04-20
+
+### Added
+- `app/domain/resume_models.py` defining the strict Pydantic Canonical Resume schema (Stage 3).
+- Strict Server-Side Request Forgery (SSRF) and size-limit protections (Stage 4).
+- `app/services/jd_service.py` to securely fetch URLs natively.
+- Zero-shot HTML scraping via `trafilatura` to algorithmically map websites into clean Job Descriptions.
+- `[POST] /process-jd/` endpoint exposed on FastAPI layer.
+
 ## [0.2.0] - 2026-04-17
 
 ### Added

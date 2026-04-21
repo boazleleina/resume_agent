@@ -1,9 +1,9 @@
 import urllib.parse
 import ipaddress
 import trafilatura
-from app.domain.exceptions import DomainException
+from app.domain.exceptions import ResumeAppError
 
-class JobDescriptionException(DomainException):
+class JobDescriptionException(ResumeAppError):
     """Raised when Job Description specific parsing fails."""
     pass
 
