@@ -15,13 +15,13 @@ class JobDescriptionSchema(BaseModel):
     )
     
     # Requirements
-    must_have_requirements: List[str] = Field(
+    core_requirements: List[str] = Field(
         default_factory=list, 
-        description="Strict, non-negotiable hard skills, degrees, or experience years explicitly requested."
+        description="The primary qualifications for the job. This includes 'Must Haves', 'Basic Qualifications', or 'We're looking for people with...'."
     )
-    nice_to_have_requirements: List[str] = Field(
+    preferred_qualifications: List[str] = Field(
         default_factory=list, 
-        description="Optional skills, 'bonus' qualifications, or nice-to-haves."
+        description="Optional skills, 'bonus' qualifications, or 'Nice-to-haves'."
     )
     
     # Technology Mapping
