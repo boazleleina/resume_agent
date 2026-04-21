@@ -9,6 +9,9 @@ Hosts pure business logic, custom exceptions, and core data models independent o
 - `exceptions.py`: Application-specific errors ensuring our API routing can return clean HTTP status codes mapped to exact logic failures.
 - `validation.py`: File validation via magic-bytes (preventing disguised executables from crashing the parsers).
 - `classification.py`: Pure heuristic algorithms (e.g., scoring text tokens) to reject letters of recommendation or cover letters from being processed as resumes.
+- `resume_models.py`: Pydantic canonical resume schema with VERBATIM/MUTABLE field annotations to prevent LLM hallucination.
+- `jd_models.py`: Pydantic schema for structured Job Description extraction (core requirements, tech stack, etc.).
+- `jd_parsing.py`: 4-layer JD extraction pipeline (JSON-LD → Trafilatura recall → BS4 heading walker → merge/dedupe).
 
 ### 2. `parsers/`
 Handles text extraction decoupling.
@@ -17,7 +20,8 @@ Handles text extraction decoupling.
 
 ### 3. `services/`
 The orchestrator.
-- `resume_service.py`: Contains `process_resume_upload`, chaining validation, parser registry, and classification sequentially. 
+- `resume_service.py`: Contains `process_resume_upload`, chaining validation, parser registry, and classification sequentially.
+- `jd_service.py`: Contains `process_job_description`, handling URL fetching with SSRF protection, memory-safe streaming, and raw text cleanup.
 
 ### 4. `routes.py`
 The FastAPI transport layer. Merely fields the request, offloads it to `services/`, and catches any domain exceptions to format standard REST responses.
@@ -67,8 +71,8 @@ graph TD
 This directory structure is purposefully designed to scale gracefully into the finalized 8-stage pipeline:
 1. **Upload** (Done)
 2. **Parse** (Done)
-3. **Normalize** (Pending `services/normalization.py`)
-4. **JD Resolution** (Pending `services/jd_service.py` using `trafilatura` for zero-shot URL extraction)
+3. **Normalize** (Done — Pydantic schema defined in `domain/resume_models.py`)
+4. **JD Resolution** (Done — 4-layer extraction in `domain/jd_parsing.py`, orchestrated by `services/jd_service.py`)
 5. **Grade** (Pending `services/llm_service.py` to bridge local Qwen 3)
 6. **Recommend** (Pending Domain traceability tagging logic)
 7. **Human Review** (Client side)
