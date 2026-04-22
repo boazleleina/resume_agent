@@ -173,14 +173,34 @@ def _extract_bs4_heading_sections(html_content: str) -> str | None:
 # ---------------------------------------------------------------------------
 # Layer 4: Merge and Deduplicate
 # ---------------------------------------------------------------------------
+def _normalize_for_dedup(line: str) -> str:
+    """
+    Strips formatting noise so two lines that say the same thing
+    but differ by a leading bullet or bold markers are caught as duplicates.
+    
+    Examples:
+      '- Build integrations with Tableau'  ->  'build integrations with tableau'
+      '**Build integrations with Tableau**' ->  'build integrations with tableau'
+      '1. Build integrations with Tableau'  ->  'build integrations with tableau'
+    """
+    import re
+    text = line.strip()
+    text = re.sub(r'^\s*[-*•]\s+', '', text)       # Strip leading bullets: - * •
+    text = re.sub(r'^\s*\d+\.\s+', '', text)        # Strip numbered lists: 1. 2.
+    text = text.replace('**', '')                     # Strip bold markers
+    text = text.replace('__', '')                     # Strip underline markers
+    return text.strip().lower()
+
+
 def _merge_and_deduplicate(*text_sources: str | None) -> str:
     """
     Takes text from all extraction layers, splits into individual lines,
-    removes exact duplicates while preserving order, and returns a single
-    clean string. This ensures we get the union of all layers without
-    repeating the same bullet point three times.
+    normalizes each line (stripping bullets, bold, casing) for comparison,
+    and removes duplicates while preserving the original formatting of
+    the first occurrence. This prevents the LLM context window from being
+    bloated with redundant content.
     """
-    seen_lines = set()
+    seen_normalized = set()
     merged_lines = []
     
     for source in text_sources:
@@ -188,8 +208,12 @@ def _merge_and_deduplicate(*text_sources: str | None) -> str:
             continue
         for line in source.split('\n'):
             clean_line = line.strip()
-            if clean_line and clean_line not in seen_lines:
-                seen_lines.add(clean_line)
+            if not clean_line:
+                continue
+            
+            normalized = _normalize_for_dedup(clean_line)
+            if normalized and normalized not in seen_normalized:
+                seen_normalized.add(normalized)
                 merged_lines.append(clean_line)
     
     return '\n'.join(merged_lines)
