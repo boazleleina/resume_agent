@@ -49,6 +49,14 @@ The codebase rests on a clear separation of concerns inside the `app/` directory
 - `app/routes.py`: Lean API endpoints that offload core processing to the services layer.
 - `tests/`: End-to-end `pytest` coverage (25 tests) validating domain heuristics, parser flows, SSRF protections, and schema integrity.
 
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/upload-resume/` | Upload and parse a resume (PDF/DOCX). Returns extracted text. |
+| POST | `/process-jd/` | Submit a JD (URL or raw text). Returns cleaned text via 4-layer pipeline. |
+| POST | `/analyze/` | Unified endpoint. Accepts resume file + JD in one request. Returns both processed results and (soon) LLM grading. |
+
 ### Directory Tree
 
 ```text
@@ -100,7 +108,7 @@ resume_agent/
    ```bash
    uvicorn app.main:app --reload
    ```
-3. Open `http://127.0.0.1:8000/docs` to test the API endpoints (like `/upload-resume/`).
+3. Open `http://127.0.0.1:8000/docs` to test the API endpoints (`/upload-resume/`, `/process-jd/`, `/analyze/`).
 
 ## Testing
 

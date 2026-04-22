@@ -25,6 +25,9 @@ The orchestrator.
 
 ### 4. `routes.py`
 The FastAPI transport layer. Merely fields the request, offloads it to `services/`, and catches any domain exceptions to format standard REST responses.
+- `/upload-resume/`: Resume file upload and parsing.
+- `/process-jd/`: JD text or URL processing.
+- `/analyze/`: Unified endpoint accepting both resume + JD in one request.
 
 ---
 

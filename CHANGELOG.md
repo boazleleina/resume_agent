@@ -2,6 +2,15 @@
 
 All notable changes to the `resume_agent` project will be documented in this file.
 
+## [0.3.1] - 2026-04-21
+
+### Added
+- `[POST] /analyze/` unified endpoint accepting both resume file and JD input in a single multipart request.
+
+### Fixed
+- Dedup normalization: lines differing only by leading bullets (`-`, `*`), bold markers (`**`), or casing are now correctly caught as duplicates, preventing bloated LLM context windows.
+- Resume text returning empty from `/analyze/` due to mismatched dictionary key (`extracted_text` -> `parsed_text`).
+
 ## [0.3.0] - 2026-04-20
 
 ### Added
