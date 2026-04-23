@@ -95,21 +95,11 @@ resume_agent/
 
 ## API Endpoints
 
-### Primary endpoints
-
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/analyze/` | Unified endpoint — resume file + JD in one request. Waits for full pipeline, returns complete JSON payload. |
-| POST | `/analyze/stream/` | Same as above but streams results via SSE as each step completes. Frontend should use this — no blank screen wait. |
-
-### Debug/testing endpoints
-
-These exist to verify individual pipeline stages in isolation (e.g. confirm the PDF parser extracted text correctly, or that JD scraping worked before running the full pipeline). They are not required by the main flow — `/analyze/` and `/analyze/stream/` handle everything internally.
-
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/upload-resume/` | Parse a resume file and return extracted text only. |
-| POST | `/process-jd/` | Clean a JD URL or raw text and return the result only. |
+| POST | `/upload-resume/` | Upload and parse a resume (PDF/DOCX). |
+| POST | `/process-jd/` | Submit a JD (URL or raw text). Returns cleaned text. |
+| POST | `/analyze/` | Unified endpoint — resume file + JD in one request. Returns full grading payload. |
 
 ---
 
