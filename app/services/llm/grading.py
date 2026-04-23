@@ -8,7 +8,7 @@ from app.domain.resume_models import CanonicalResume
 
 from .cache import cache_get, cache_key, cache_set
 from .exceptions import LLMServiceException
-from .ollama_client import call_ollama
+from .factory import get_client
 from .prompts import GRADING_SYSTEM
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ async def grade_and_recommend(
 
     resume_context = _build_resume_context(resume)
     user_prompt = _build_grading_user_prompt(resume_context, clean_jd, skill_match)
-    llm_output = await call_ollama(GRADING_SYSTEM, user_prompt, think=True)
+    llm_output = await get_client().prompt_model(GRADING_SYSTEM, user_prompt, think=True)
 
     try:
         grading = GradingResult.model_validate_json(llm_output)
@@ -69,6 +69,12 @@ def _build_resume_context(resume: CanonicalResume) -> dict:
 
 
 def _build_grading_user_prompt(resume_context: dict, clean_jd: str, skill_match: dict) -> str:
+    prose_reqs = skill_match.get("prose_requirements", [])
+    prose_section = (
+        f"\n- Qualitative requirements (assess these yourself, cannot be skill-matched):\n"
+        + "\n".join(f"  • {r}" for r in prose_reqs)
+        if prose_reqs else ""
+    )
     return f"""Resume:
 {json.dumps(resume_context, indent=2)}
 
@@ -79,32 +85,46 @@ Pre-computed skill match:
 - Overall match: {skill_match['overall_match_pct']}%
 - Required skills match: {skill_match['required_match_pct']}%
 - Tech stack match: {skill_match['tech_match_pct']}%
-- Matched skills: {skill_match['matched']}
+- Matched skills (confirmed present — do NOT list these as gaps): {skill_match['matched']}
+- Fuzzy-matched skills (close enough — do NOT list these as gaps): {skill_match.get('fuzzy_matched', [])}
 - Missing required: {skill_match['missing_required']}
 - Missing tech stack: {skill_match['missing_tech']}
-- Missing preferred: {skill_match['missing_preferred']}
+- Missing preferred: {skill_match['missing_preferred']}{prose_section}
 
 Analyze and grade this candidate."""
 
 
 def _enforce_edit_traceability(grading: GradingResult, resume: CanonicalResume) -> None:
     """
-    Downgrades edits tagged 'supported by source text' when no evidence
-    for them appears in the resume. Mutates grading in place.
+    Two passes:
+    1. Downgrade 'supported by source text' edits that have no evidence in resume.
+    2. Downgrade 'missing but unverifiable' edits whose named tech tokens are
+       already present in the resume — grader suggested adding something that's there.
     """
     resume_lower = resume.raw_text.lower() if resume.raw_text else ""
     if not resume_lower:
         return
 
     for edit in grading.top_3_edits:
-        if edit.traceability != "supported by source text":
-            continue
-        if not _suggestion_has_evidence(edit.suggestion.lower(), resume_lower):
-            logger.warning(
-                f"Traceability override: '{edit.suggestion[:80]}...' "
-                f"tagged as 'supported by source text' but no evidence found in resume."
-            )
-            edit.traceability = "missing but unverifiable, ask user to supply"
+        if edit.traceability == "supported by source text":
+            if not _suggestion_has_evidence(edit.suggestion.lower(), resume_lower):
+                logger.warning(
+                    f"Traceability override: '{edit.suggestion[:80]}' "
+                    f"tagged 'supported by source text' but no evidence in resume."
+                )
+                edit.traceability = "missing but unverifiable, ask user to supply"
+
+        elif edit.traceability in (
+            "missing but unverifiable, ask user to supply",
+            "generic strengthening suggestion",
+        ):
+            already_present = _suggestion_names_present_skills(edit.suggestion, resume_lower)
+            if already_present:
+                logger.warning(
+                    f"Traceability override: '{edit.suggestion[:80]}' suggests adding "
+                    f"{already_present} but already in resume."
+                )
+                edit.traceability = "already present in resume — rephrase for emphasis"
 
 
 def _suggestion_has_evidence(suggestion: str, resume_text: str) -> bool:
@@ -121,3 +141,20 @@ def _suggestion_has_evidence(suggestion: str, resume_text: str) -> bool:
         if phrase in resume_text:
             return True
     return False
+
+
+def _suggestion_names_present_skills(suggestion: str, resume_lower: str) -> list[str]:
+    """
+    Extract capitalized tokens (likely tech names) from the suggestion.
+    Return those already found in resume_lower — these are false 'missing' claims.
+    Ignores short/common words (≤3 chars) and sentence starters.
+    """
+    import re
+    tokens = re.findall(r'\b[A-Z][A-Za-z0-9+#.]*\b', suggestion)
+    STOP = {"Add", "The", "Use", "For", "This", "Include", "Mention", "Note",
+            "Consider", "Ensure", "Make", "Move", "Update", "Show", "Put"}
+    found = [
+        t for t in tokens
+        if t not in STOP and len(t) > 3 and t.lower() in resume_lower
+    ]
+    return found

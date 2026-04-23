@@ -6,7 +6,7 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI
 
-from app.config import LLM_MODEL_TAG, OLLAMA_TAGS_URL
+from app.config import LLM_EXTRACTION_MODEL, LLM_GRADING_MODEL, OLLAMA_TAGS_URL
 from app.routes import router
 
 # ---------------------------------------------------------------------------
@@ -56,16 +56,17 @@ async def lifespan(app: FastAPI):
                 m.get("name", "") for m in response.json().get("models", [])
             ]
             
-            model_found = any(LLM_MODEL_TAG in m for m in available_models)
-            
-            if not model_found:
+            required_models = {LLM_EXTRACTION_MODEL, LLM_GRADING_MODEL}
+            missing = [m for m in required_models if not any(m in a for a in available_models)]
+
+            if missing:
                 logger.warning(
-                    f"Model '{LLM_MODEL_TAG}' not found in Ollama. "
+                    f"Models not found in Ollama: {missing}. "
                     f"Available: {available_models}. "
-                    f"Run: ollama pull {LLM_MODEL_TAG}"
+                    f"Run: ollama pull <model>"
                 )
             else:
-                logger.info(f"Ollama OK: '{LLM_MODEL_TAG}' is available")
+                logger.info(f"Ollama OK: extraction={LLM_EXTRACTION_MODEL}, grading={LLM_GRADING_MODEL}")
                 
     except httpx.HTTPError:
         logger.warning(

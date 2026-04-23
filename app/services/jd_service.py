@@ -1,6 +1,6 @@
 import httpx
 import html
-from app.domain.jd_parsing import is_valid_url, extract_text_from_html, JobDescriptionException
+from app.domain.jd_parsing import is_valid_url, extract_text_from_html, JobDescriptionException, ScrapingBlockedException
 
 # We want to protect against memory DoS, so if a payload exceeds 5MB, we sever the connection.
 MAX_PAYLOAD_SIZE = 5 * 1024 * 1024  # 5 MB
@@ -42,8 +42,21 @@ async def process_job_description(input_data: str) -> str:
             # Safely decode the bytes into an HTML string
             html_content = html_bytes.decode('utf-8', errors='ignore')
             
-    except httpx.HTTPError as e:
-        raise JobDescriptionException(f"Failed to securely fetch URL: {str(e)}")
+    except httpx.HTTPStatusError as e:
+        raise ScrapingBlockedException(
+            "We couldn't access that job posting — the site blocked automated access. "
+            "Copy the job description text from the page and paste it directly into the field."
+        )
+    except (httpx.TimeoutException, httpx.ConnectError):
+        raise ScrapingBlockedException(
+            "We couldn't reach that URL — the site may be down or blocking requests. "
+            "Copy the job description text from the page and paste it directly into the field."
+        )
+    except httpx.HTTPError:
+        raise ScrapingBlockedException(
+            "We couldn't load that job posting. "
+            "Copy the job description text from the page and paste it directly into the field."
+        )
 
     # 3. Execution Case: Delegate the HTML string to Trafilatura
     clean_text = extract_text_from_html(html_content)
