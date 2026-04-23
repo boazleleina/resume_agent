@@ -12,6 +12,17 @@ from app.domain.exceptions import (
     DocumentParsingError
 )
 
+import asyncio
+from app.services.llm import (
+    LLMServiceException, 
+    extract_resume_facts,
+    extract_jd_facts,
+    compute_skill_match,
+    grade_and_recommend,
+)
+
+
+
 router = APIRouter()
 
 @router.post("/upload-resume/")
@@ -102,6 +113,13 @@ async def analyze(
         raise HTTPException(status_code=400, detail=str(e))
     except DocumentParsingError as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+    resume_text = resume_result.get("parsed_text", "")
+    if not resume_text.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Resume parsed but no text was extracted. The file may be a scanned image without OCR."
+        )
 
     # --- Step 2: Clean the JD text (reuses existing logic) ---
     try:
@@ -109,12 +127,29 @@ async def analyze(
     except JobDescriptionException as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # --- Step 3: LLM Grading (placeholder - wired next) ---
-    # This is where we will call:
-    #   grade_result = await grade_resume(canonical_resume, clean_jd)
+    # --- Step 3: Extract structured facts (parallel for speed) ---
+    try:
+        resume, jd = await asyncio.gather(
+            extract_resume_facts(resume_text),
+            extract_jd_facts(clean_jd),
+        )
+    except LLMServiceException as e:
+        raise HTTPException(status_code=502, detail=f"LLM extraction failed: {str(e)}")
+
+    # --- Step 4: Compute deterministic skill match ---
+    skill_match = compute_skill_match(resume, jd)
+
+    # --- Step 5: Grade and recommend (deep reasoning, ~60-120s) ---
+    try:
+        grading = await grade_and_recommend(resume, clean_jd, skill_match)
+    except LLMServiceException as e:
+        raise HTTPException(status_code=502, detail=f"LLM grading failed: {str(e)}")
 
     return {
-        "resume_text": resume_result.get("parsed_text", ""),
+        "resume_text": resume_text,
         "clean_jd": clean_jd,
-        "grading": "LLM grading not yet connected. This will return score, matched_skills, and missing_skills."
+        "structured_resume": resume.model_dump(),
+        "structured_jd": jd.model_dump(),
+        "skill_match": skill_match,
+        "grading": grading.model_dump(),
     }

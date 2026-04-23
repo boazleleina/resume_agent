@@ -78,7 +78,12 @@ resume_agent/
 │   │   └── registry.py
 │   └── services/
 │       ├── jd_service.py         # JD URL fetching & raw text cleanup
-│       └── resume_service.py
+│       ├── resume_service.py
+│       └── llm/                  # Modular 3-step LLM pipeline
+│           ├── extraction.py     # Step 1: Structured extraction
+│           ├── matching.py       # Step 2: Deterministic skill matching
+│           ├── grading.py        # Step 3: Reasoning & analysis
+│           └── prompts.py        # Centralized prompt management
 ├── tests/
 │   ├── domain/
 │   │   ├── test_classification.py
@@ -89,12 +94,35 @@ resume_agent/
 │   ├── parsers/
 │   │   └── test_registry.py
 │   └── services/
-│       └── test_jd_service.py
+│       ├── test_jd_service.py
+│       └── test_llm_matching.py  # Tests for skill normalization
 ├── ARCHITECTURE.md
 ├── CHANGELOG.md
 ├── README.md
 └── requirements.txt
 ```
+
+---
+
+## Roadmap & Future Enhancements
+
+### 1. Semantic Similarity Matching (v2)
+Currently, skill matching relies on a deterministic `SKILL_ALIASES` map. While effective for tech keywords, it can miss semantic synonyms.
+- **Planned**: Replace the alias map with `sentence-transformers` embeddings (~80MB model).
+- **Goal**: Compute cosine similarity between vectors to catch matches like "cross-functional leadership" ≈ "led distributed teams" without manual rules.
+
+### 2. PDF Generation (v2)
+- **Goal**: Implement `services/pdf_generator.py` to produce a finalized, ATS-optimized PDF incorporating the "Top 3 Edits." This will be stateless, using the Canonical JSON as the source.
+
+### 3. Pipeline Progress
+1. **Upload** (Done)
+2. **Parse** (Done)
+3. **Normalize** (Done)
+4. **JD Resolution** (Done)
+5. **Grade** (Done)
+6. **Recommend** (Done)
+7. **Human Review** (Pending Frontend)
+8. **Regenerate** (Pending v2)
 
 ---
 
@@ -104,17 +132,21 @@ resume_agent/
    ```bash
    pip install -r requirements.txt
    ```
-2. Start the FastAPI development server:
+2. **Local LLM Setup:** Ensure [Ollama](https://ollama.ai/) is installed and the `qwen3:8b` model is pulled:
+   ```bash
+   ollama pull qwen3:8b
+   ```
+3. Start the FastAPI development server:
    ```bash
    uvicorn app.main:app --reload
    ```
-3. Open `http://127.0.0.1:8000/docs` to test the API endpoints (`/upload-resume/`, `/process-jd/`, `/analyze/`).
+4. Open `http://127.0.0.1:8000/docs` to test the API endpoints (`/upload-resume/`, `/process-jd/`, `/analyze/`).
 
 ## Testing
 
 To run the automated test suite, execute:
 ```bash
-pytest tests/
+./venv/bin/pytest tests/ -v
 ```
 
 *(This README is a living document and will be updated as the agent is built!)*

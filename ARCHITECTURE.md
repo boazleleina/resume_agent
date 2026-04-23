@@ -23,11 +23,18 @@ The orchestrator.
 - `resume_service.py`: Contains `process_resume_upload`, chaining validation, parser registry, and classification sequentially.
 - `jd_service.py`: Contains `process_job_description`, handling URL fetching with SSRF protection, memory-safe streaming, and raw text cleanup.
 
-### 4. `routes.py`
+### 4. `services/llm/` (New)
+A modular package for local LLM orchestration using Ollama.
+- `extraction.py`: Fast structured extraction using `think=False`.
+- `matching.py`: Deterministic skill matching logic.
+- `grading.py`: Nuanced career analysis using `think=True` reasoning.
+- `prompts.py`: Centralized prompt storage for rapid iteration.
+
+### 5. `routes.py`
 The FastAPI transport layer. Merely fields the request, offloads it to `services/`, and catches any domain exceptions to format standard REST responses.
 - `/upload-resume/`: Resume file upload and parsing.
 - `/process-jd/`: JD text or URL processing.
-- `/analyze/`: Unified endpoint accepting both resume + JD in one request.
+- `/analyze/`: Unified endpoint accepting both resume + JD in one request. Orchestrates the 3-step LLM pipeline.
 
 ---
 
@@ -35,30 +42,14 @@ The FastAPI transport layer. Merely fields the request, offloads it to `services
 
 ```mermaid
 graph TD
-    Client["Client/Frontend"] -->|"POST /upload-resume"| Routes["app/routes.py\n(FastAPI layer)"]
+    Client["Client/Frontend"] -->|"POST /analyze"| Routes["app/routes.py\n(FastAPI layer)"]
     
-    Routes -->|"content bytes, extension"| Service["app/services/resume_service.py\n(Orchestrator)"]
+    Routes -->|"Resume + JD"| Service["app/services/llm/extraction.py\n(Step 1: Extraction)"]
+    Service -->|"Structured Facts"| Match["app/services/llm/matching.py\n(Step 2: Matching)"]
+    Match -->|"Match Report"| Grade["app/services/llm/grading.py\n(Step 3: Reasoning)"]
     
-    %% Validation Step
-    Service -->|"Check size & config"| Config["app/config.py"]
-    Service -->|Verify signature| Validation["app/domain/validation.py"]
-    Validation -->|"Pass/Fail"| Service
-    
-    %% Parsing Step
-    Service -->|"Route bytes"| Registry["app/parsers/registry.py"]
-    Registry -->|"ext == pdf"| PDF["app/parsers/pdf_parser.py"]
-    Registry -->|"ext == docx"| DOCX["app/parsers/docx_parser.py"]
-    PDF --> Registry
-    DOCX --> Registry
-    Registry -->|"Extracted Text"| Service
-    
-    %% Classification Step
-    Service -->|"Score tokens"| Classifier["app/domain/classification.py"]
-    Classifier -->|"'resume', 'cover_letter'"| Service
-    
-    %% Return flow
-    Service -->|"Return Dict (Wait for LLM step)"| Routes
-    Routes -->|"Return JSON"| Client
+    Grade -->|"Grading Result"| Routes
+    Routes -->|"Full JSON Payload"| Client
 
     %% Styling
     classDef domain stroke:#333,stroke-width:2px;
@@ -69,14 +60,22 @@ graph TD
 
 ---
 
-## Future Extensibility: The 8-Stage Pipeline
+## Roadmap & Future Enhancements
 
-This directory structure is purposefully designed to scale gracefully into the finalized 8-stage pipeline:
+### 1. Semantic Similarity Matching (v2)
+Currently, skill matching relies on a deterministic `SKILL_ALIASES` map. While effective for tech keywords, it can miss semantic synonyms.
+- **Planned**: Replace the alias map with `sentence-transformers` embeddings.
+- **Goal**: Compute cosine similarity between vectors to catch matches like "cross-functional leadership" ≈ "led distributed teams" without manual rules.
+
+### 2. PDF Generation (v2)
+- **Goal**: Implement `services/pdf_generator.py` to produce a finalized, ATS-optimized PDF incorporating the "Top 3 Edits."
+
+### 3. Pipeline Progress
 1. **Upload** (Done)
 2. **Parse** (Done)
-3. **Normalize** (Done — Pydantic schema defined in `domain/resume_models.py`)
-4. **JD Resolution** (Done — 4-layer extraction in `domain/jd_parsing.py`, orchestrated by `services/jd_service.py`)
-5. **Grade** (Pending `services/llm_service.py` to bridge local Qwen 3)
-6. **Recommend** (Pending Domain traceability tagging logic)
-7. **Human Review** (Client side)
-8. **Regenerate** (Pending `services/pdf_generator.py`)
+3. **Normalize** (Done)
+4. **JD Resolution** (Done)
+5. **Grade** (Done)
+6. **Recommend** (Done)
+7. **Human Review** (Pending Frontend)
+8. **Regenerate** (Pending v2)
