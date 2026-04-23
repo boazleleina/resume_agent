@@ -8,3 +8,4 @@ pydantic
 trafilatura
 beautifulsoup4
 httpx
+rapidfuzz
