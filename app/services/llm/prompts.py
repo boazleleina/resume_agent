@@ -8,7 +8,6 @@ consumes them, and diffs show prompt changes cleanly.
 
 RESUME_SCHEMA_PROMPT = """Return JSON with these exact fields:
 {
-  "raw_text": null,
   "metrics_found": ["list of quantifiable metrics found, e.g. '30% lift', '520ms to 310ms'"],
   "contact": {
     "name": "string or null (VERBATIM)",
@@ -45,7 +44,7 @@ RESUME_SCHEMA_PROMPT = """Return JSON with these exact fields:
   ],
   "certifications": ["list of cert names (VERBATIM)"],
   "skills": {
-    "all_terms": ["flat list of every skill, tool, language, framework mentioned (VERBATIM)"]
+    "all_terms": ["flat list of every skill, tool, language, framework mentioned (VERBATIM) — do NOT include section headers like 'Languages & Frameworks', 'Cloud & MLOps', 'AI / ML', 'Data & APIs', or 'Practices'"]
   }
 }
 VERBATIM means copy exactly from the text. Do not invent or summarize."""
@@ -93,7 +92,7 @@ Return ONLY valid JSON with this exact structure:
     {
       "section": "which resume section to edit",
       "suggestion": "specific actionable edit",
-      "traceability": "one of: supported by source text | formatting improvement | generic strengthening suggestion | missing but unverifiable, ask user to supply"
+      "traceability": "one of: supported by source text | formatting improvement | generic strengthening suggestion | missing but unverifiable, ask user to supply | already present in resume — rephrase for emphasis"
     }
   ]
 }

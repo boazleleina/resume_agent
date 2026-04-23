@@ -16,3 +16,6 @@ logs/
 
 # OS
 .DS_Store
+
+# App data / Cache
+data/

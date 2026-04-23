@@ -16,7 +16,7 @@ from app.domain.resume_models import CanonicalResume
 
 from .cache import cache_get, cache_key, cache_set
 from .exceptions import LLMServiceException
-from .ollama_client import call_ollama
+from .factory import get_client
 from .prompts import JD_EXTRACTION_SYSTEM, RESUME_EXTRACTION_SYSTEM
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ async def extract_resume_facts(raw_text: str) -> CanonicalResume:
         return cached
 
     user_prompt = f"Parse this resume:\n\n{raw_text}"
-    llm_output = await call_ollama(RESUME_EXTRACTION_SYSTEM, user_prompt, think=False)
+    llm_output = await get_client().prompt_model(RESUME_EXTRACTION_SYSTEM, user_prompt, think=False)
 
     try:
         parsed = json.loads(llm_output)
@@ -66,7 +66,7 @@ async def extract_jd_facts(clean_jd: str) -> JobDescriptionSchema:
         return cached
 
     user_prompt = f"Parse this job description:\n\n{clean_jd}"
-    llm_output = await call_ollama(JD_EXTRACTION_SYSTEM, user_prompt, think=False)
+    llm_output = await get_client().prompt_model(JD_EXTRACTION_SYSTEM, user_prompt, think=False)
 
     try:
         jd = JobDescriptionSchema.model_validate_json(llm_output)

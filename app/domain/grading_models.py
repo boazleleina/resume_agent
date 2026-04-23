@@ -7,7 +7,8 @@ class ResumeEdit(BaseModel):
     suggestion: str = Field(description="Specific actionable edit.")
     traceability: str = Field(
         description="One of: 'supported by source text' | 'formatting improvement' | "
-                    "'generic strengthening suggestion' | 'missing but unverifiable, ask user to supply'"
+                    "'generic strengthening suggestion' | 'missing but unverifiable, ask user to supply' | "
+                    "'already present in resume — rephrase for emphasis'"
     )
 
 
