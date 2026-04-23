@@ -9,6 +9,11 @@ class JobDescriptionException(ResumeAppError):
     """Raised when Job Description specific parsing fails."""
     pass
 
+
+class ScrapingBlockedException(JobDescriptionException):
+    """Raised when a URL cannot be scraped (blocked, paywalled, JS-only)."""
+    pass
+
 def is_valid_url(text: str) -> bool:
     """
     Heuristic to determine if the input text is a URL versus raw pasted text.
@@ -246,8 +251,9 @@ def extract_text_from_html(html_content: str) -> str:
     final_text = _merge_and_deduplicate(jsonld_text, trafilatura_text, bs4_text)
     
     if not final_text:
-        raise JobDescriptionException(
-            "All extraction layers failed. This page may be heavily JavaScript-rendered."
+        raise ScrapingBlockedException(
+            "We couldn't extract text from that page — it may load content dynamically with JavaScript. "
+            "Copy the job description text from the page and paste it directly into the field."
         )
         
     return final_text
