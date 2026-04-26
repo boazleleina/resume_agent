@@ -7,7 +7,7 @@ A human-in-the-loop, AI-powered agent designed to parse your resume, compare it 
 * **LLM Engine:** Local Ollama (Qwen 3 8B)
 * **Parsers:** `pdfplumber` (PDF), `python-docx` (Word)
 * **JD Extraction:** 4-layer pipeline using `trafilatura` (recall-mode) + `beautifulsoup4` (heading walker) + JSON-LD structured data
-* **Architecture:** Domain-Driven Design (DDD) & Stateless processing for clean PDF generation and accurate iteration.
+* **Architecture:** Domain-Driven Design (DDD) & Stateless processing for clean PDF generation and accurate iteration. For a complete deep-dive, see the [System Design Document](SYSTEM_DESIGN.md).
 * **Testing:** `pytest`
 
 ---
