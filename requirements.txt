@@ -9,3 +9,5 @@ trafilatura
 beautifulsoup4
 httpx
 rapidfuzz
+streamlit
+httpx-sse

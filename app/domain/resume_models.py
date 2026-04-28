@@ -23,7 +23,7 @@ def _normalize_for_comparison(text: str) -> str:
     """
     Normalize text for lenient verbatim comparison.
     Strips punctuation, collapses whitespace, lowercases.
-    'Marysville, WA' and 'marysville wa' become identical.
+    'Seattle, WA' and 'seattle wa' become identical.
     """
     if not text:
         return ""
