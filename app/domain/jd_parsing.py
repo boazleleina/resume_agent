@@ -53,7 +53,7 @@ def is_valid_url(text: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Layer 1: JSON-LD JobPosting Extraction
+# Layer 1: JSON-LinkedData JobPosting Extraction
 # ---------------------------------------------------------------------------
 def _extract_jsonld_description(html_content: str) -> str | None:
     """
@@ -124,9 +124,6 @@ def _extract_trafilatura_recall(html_content: str) -> str | None:
 # ---------------------------------------------------------------------------
 def _extract_bs4_heading_sections(html_content: str) -> str | None:
     """
-    Safety net for the exact bug you found: when H1 and H3 tags are stacked
-    back-to-back, Trafilatura thinks it's a nav menu and deletes the section.
-    
     This function walks every heading tag (h1-h6), and for each heading,
     collects everything that follows it (paragraphs, lists, bold text)
     until it hits the next heading. This guarantees requirement lists 
