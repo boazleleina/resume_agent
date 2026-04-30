@@ -4,6 +4,7 @@ A human-in-the-loop, AI-powered agent designed to parse your resume, compare it 
 
 ## Tech Stack
 * **Backend:** Python + FastAPI
+* **Frontend:** Streamlit + Custom Dark Theme CSS Architecture
 * **LLM Engine:** Local Ollama (Qwen 3 8B)
 * **Parsers:** `pdfplumber` (PDF), `python-docx` (Word)
 * **JD Extraction:** 4-layer pipeline using `trafilatura` (recall-mode) + `beautifulsoup4` (heading walker) + JSON-LD structured data
@@ -24,6 +25,16 @@ A human-in-the-loop, AI-powered agent designed to parse your resume, compare it 
 6. **Recommend:** Improvements are strictly limited to existing evidence or generic advice using Traceability Categories to prevent inventing metrics.
 7. **Human Review:** User reviews and approves/rejects proposed patches on the frontend.
 8. **Rewrite & Regenerate:** The approved patches are applied to the Canonical JSON, and a new, standardized, ATS-friendly PDF is generated statelessly.
+
+---
+
+## Frontend UI / UX
+
+The agent features a premium, responsive **Dark Theme UI** built on Streamlit but heavily customized via raw CSS injection.
+- **Glassmorphism & Aesthetics:** Custom `.stApp` overrides provide a deep `#0f0f1a` gradient background, floating cards, and animated micro-interactions without relying on Streamlit's default components.
+- **Real-Time Streaming:** The frontend connects to FastAPI via Server-Sent Events (`httpx-sse`), dynamically updating the UI as the backend parses, extracts, and grades.
+- **State-Machine Routing:** Streamlit's `st.session_state` is used to implement a strict `input` -> `analyzing` -> `results` state machine, ensuring seamless transitions and preventing UI ghosting.
+- **Error Interception:** Non-SSE errors (e.g., 403 Forbidden URL fetch errors or Corrupted PDFs) are caught dynamically by the API connector and rendered in beautiful, centered error cards with actionable reset flows.
 
 ---
 
@@ -61,6 +72,8 @@ The codebase rests on a clear separation of concerns inside the `app/` directory
 
 ```text
 resume_agent/
+├── .streamlit/
+│   └── config.py             # Global Streamlit config (5MB file limits)
 ├── app/
 │   ├── config.py
 │   ├── main.py
@@ -84,6 +97,11 @@ resume_agent/
 │           ├── matching.py       # Step 2: Deterministic skill matching
 │           ├── grading.py        # Step 3: Reasoning & analysis
 │           └── prompts.py        # Centralized prompt management
+├── template/
+│   ├── api.py                # Synchronous SSE API connector
+│   ├── app.py                # Main Streamlit UI router & state machine
+│   ├── components.py
+│   └── styles.py
 ├── tests/
 │   ├── domain/
 │   │   ├── test_classification.py
@@ -131,7 +149,12 @@ Currently, skill matching relies on a deterministic `SKILL_ALIASES` map. While e
    ```bash
    uvicorn app.main:app --reload
    ```
-4. Open `http://127.0.0.1:8000/docs` to test the API endpoints (`/upload-resume/`, `/process-jd/`, `/analyze/`).
+4. In a separate terminal, start the Streamlit frontend UI:
+   ```bash
+   streamlit run template/app.py
+   ```
+5. Open `http://localhost:8501` to access the full Resume Agent UI.
+6. Open `http://127.0.0.1:8000/docs` to test the API endpoints directly.
 
 ## Testing
 

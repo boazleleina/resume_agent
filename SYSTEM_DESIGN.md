@@ -67,6 +67,14 @@ LLMs are probabilistic and prone to inventing facts. Instead of relying solely o
     *   `is_valid_url`: Explicitly blocks `localhost` and private IP spaces.
     *   `httpx.stream`: Downloads HTML payloads chunk-by-chunk, forcibly aborting the connection if the server lies about file size or exceeds the 5MB safe limit.
 
+### E. Frontend UI & UX Isolation
+*   **Decision**: Default Streamlit components lack the high-fidelity aesthetics required for a premium, pro-tool experience. Furthermore, Streamlit's synchronous layout execution can cause "ghosting" of old UI elements during heavy blocking backend calls.
+*   **Implementation**: 
+    *   **Custom CSS Overrides**: The application injects raw CSS via `st.markdown(unsafe_allow_html=True)` to completely override Streamlit's `.stApp`, utilizing glassmorphism, flexbox centering, and a custom Dark Theme palette.
+    *   **State-Machine Routing**: The UI strictly adheres to a three-state machine (`input` -> `analyzing` -> `results`) tracked in `st.session_state`.
+    *   **The Z-Index Blackout Strategy**: To prevent DOM freezing during the blocking SSE network requests, the "analyzing" view renders a full-screen, fixed `z-index: 999999` CSS overlay. This guarantees the old UI is instantly hidden and completely isolates the loading animation.
+    *   **State Decoupling**: Input fields that share identical visual placements (like "Paste Text" vs "Paste Link") use distinct, hardcoded Streamlit keys to prevent memory bleeding across toggles.
+
 ## 5. Caching Strategy
 *   **Decision**: Prevent identical LLM requests from wasting local compute time and API delays.
 *   **Implementation**: A two-layer caching system (`cache.py`). 

@@ -144,7 +144,7 @@ div[role="radiogroup"] > label p {
     border-radius: 12px !important;
     border: 1px solid rgba(255, 255, 255, 0.1) !important;
     color: #e8e9f3 !important;
-    background: rgba(0, 0, 0, 0.2) !important;
+    background: rgba(255, 255, 255, 0.02) !important;
     font-family: 'Space Mono', monospace !important;
     font-size: 0.9rem !important;
     padding: 1rem !important;
@@ -250,13 +250,42 @@ div[role="radiogroup"] > label p {
 }
 
 /* ── Results & Loading UI ── */
-.loading-wrap { max-width: 700px; margin: 6rem auto 0; padding: 3rem 2rem; text-align: center; }
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+    z-index: 999999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+.loading-wrap { max-width: 700px; text-align: center; }
 .loading-title { font-size: 2.5rem; font-weight: 600; color: #64ffda; margin-bottom: 0.5rem; }
 .dots-row { display: flex; justify-content: center; gap: 0.6rem; margin-top: 1.5rem; }
+
 @keyframes pulse-dot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: #64ffda; animation: pulse-dot 1.4s ease-in-out infinite; }
 .dot:nth-child(2) { animation-delay: 0.2s; }
 .dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes changeText {
+    0%, 20% { content: "Getting Ready..."; }
+    20.1%, 40% { content: "Reading your resume..."; }
+    40.1%, 60% { content: "Fetching job description..."; }
+    60.1%, 80% { content: "Synthesizing AI feedback..."; }
+    80.1%, 100% { content: "Crunching the final numbers..."; }
+}
+.dynamic-loading-text::after {
+    content: "Getting Ready...";
+    animation: changeText 15s infinite;
+    color: #7c4dff;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
 
 .match-score-large { text-align: center; margin-bottom: 2rem; margin-top: 2rem; }
 .score-number { font-family: 'Space Mono', monospace; font-size: 4rem; font-weight: 700; color: #64ffda; display: block; }
@@ -296,8 +325,6 @@ def render_input_view():
 
     if "jd_input_mode" not in st.session_state:
         st.session_state.jd_input_mode = "Paste Text"
-    if "jd_text_value" not in st.session_state:
-        st.session_state.jd_text_value = ""
 
     left, right = st.columns([1, 1], gap="large")
 
@@ -336,11 +363,10 @@ def render_input_view():
         if mode == "Paste Text":
             jd_input = st.text_area(
                 "Job Description",
-                value=st.session_state.jd_text_value,
                 placeholder="Paste the job description here... Include the role, responsibilities, required skills, and qualifications.",
-                label_visibility="collapsed"
+                label_visibility="collapsed",
+                key="jd_text_area_val"
             )
-            st.session_state.jd_text_value = jd_input
             
             char_count = len(jd_input)
             st.markdown(f"""
@@ -352,11 +378,10 @@ def render_input_view():
         else:
             jd_input = st.text_input(
                 "Job Link",
-                value=st.session_state.jd_text_value,
                 placeholder="Paste the job posting link (LinkedIn, Indeed, etc.)",
-                label_visibility="collapsed"
+                label_visibility="collapsed",
+                key="jd_link_input_val"
             )
-            st.session_state.jd_text_value = jd_input
 
         st.markdown("""
         <div class="tip"><b>Pro tip:</b> The more detailed the job description, the more accurate the analysis</div>
@@ -406,11 +431,13 @@ def render_input_view():
 
 
 def render_loading_view():
+    loading_placeholder = st.empty()
     loading_html = (
-        '<div class="main">'
+        '<div class="loading-overlay">'
         '<div class="loading-wrap">'
         '<div class="loading-title">Agent is Working...</div>'
-        '<p class="loading-subtitle" style="color: #a0a0b0;">Running AI analysis pipeline</p>'
+        '<p class="loading-subtitle" style="color: #a0a0b0; margin-bottom: 5px;">Running AI analysis pipeline</p>'
+        '<div class="dynamic-loading-text" style="margin-bottom: 30px;"></div>'
         '<div class="dots-row">'
         '<div class="dot"></div>'
         '<div class="dot"></div>'
@@ -419,11 +446,7 @@ def render_loading_view():
         '</div>'
         '</div>'
     )
-    st.markdown(loading_html, unsafe_allow_html=True)
-
-    progress_bar = st.progress(10)
-    status_text = st.empty()
-    status_text.markdown("**🔄 Breaking down your resume...**")
+    loading_placeholder.markdown(loading_html, unsafe_allow_html=True)
 
     try:
         resume_data = None
@@ -440,24 +463,11 @@ def render_loading_view():
             data = event_obj["data"]
 
             if event == "resume":
-                status_text.markdown("**🔄 Extracting job requirements...**")
-                progress_bar.progress(40)
                 resume_data = data
-
-            elif event == "jd":
-                status_text.markdown("**🔄 Crunching the numbers...**")
-                progress_bar.progress(60)
-
             elif event == "skill_match":
-                status_text.markdown("**🔄 Synthesizing AI feedback (this takes ~30–60s)...**")
-                progress_bar.progress(75)
                 match_data = data
-
             elif event == "grading":
-                status_text.markdown("**✅ Analysis Complete!**")
-                progress_bar.progress(100)
                 grading_data = data
-
             elif event == "done":
                 break
 
@@ -468,10 +478,23 @@ def render_loading_view():
         st.rerun()
 
     except Exception as e:
-        st.error(f"Analysis failed: {str(e)}")
-        if st.button("Try Again"):
-            st.session_state.app_state = "input"
-            st.rerun()
+        loading_placeholder.empty() # Remove the full-screen overlay so the user can see the error!
+        
+        st.markdown("<div style='height: 15vh;'></div>", unsafe_allow_html=True)
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            error_msg = str(e)
+            st.markdown(f"""
+            <div style="background: rgba(244, 67, 54, 0.05); border: 1px solid rgba(244, 67, 54, 0.3); padding: 3rem; border-radius: 16px; text-align: center; margin-bottom: 2rem; backdrop-filter: blur(10px);">
+                <div style="font-size: 4rem; margin-bottom: 1rem;">⚠️</div>
+                <h3 style="color: #f44336; margin-bottom: 1rem; font-size: 2rem; font-family: 'Inter', sans-serif; font-weight: 800;">Analysis Failed</h3>
+                <p style="color: #e8e9f3; font-size: 1.1rem; line-height: 1.6;">{error_msg}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if st.button("⬅️ Try Again", type="primary", use_container_width=True):
+                st.session_state.app_state = "input"
+                st.rerun()
 
 
 def render_results_view():
