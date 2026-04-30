@@ -50,13 +50,20 @@ All environment-overridable settings in one place:
 ### 6. `routes.py`
 Thin FastAPI transport layer. Fields requests, delegates to services, catches domain exceptions, formats REST responses. No business logic lives here.
 
+### 7. `template/` (Frontend)
+The user-facing Streamlit application.
+- `app.py`: The main router and state machine (`input` -> `analyzing` -> `results`). It heavily overrides Streamlit's default components using raw CSS injected via `st.markdown(unsafe_allow_html=True)` to create a premium Dark Theme aesthetic.
+- `api.py`: A synchronous wrapper using `httpx-sse` to stream server-sent events from the FastAPI backend. It explicitly intercepts non-SSE HTTP responses (e.g., 400 Bad Request) to extract raw JSON error payloads and bubble them up to the UI.
+- `components.py` & `styles.py`: Extracted styling and component builders for UI maintainability.
+
 ---
 
 ## Data Flow
 
 ```mermaid
 graph TD
-    Client["Client/Frontend"] -->|"POST /analyze"| Routes["routes.py"]
+    User["User"] -->|"Interacts with UI"| Streamlit["Streamlit Frontend\n(template/app.py)"]
+    Streamlit -->|"POST /analyze/stream"| Routes["routes.py"]
 
     Routes --> ResumeService["resume_service.py\n(validate → parse → classify)"]
     Routes --> JDService["jd_service.py\n(fetch/clean JD text)"]
@@ -71,7 +78,8 @@ graph TD
     Factory --> OllamaClient["OllamaClient\n(implements LLMBase)"]
 
     Grading -->|"GradingResult"| Routes
-    Routes -->|"Full JSON payload"| Client
+    Routes -->|"SSE Stream / JSON"| Streamlit
+    Streamlit -->|"Updates UI"| User
 
     classDef provider fill:#005,color:#fff;
     class OllamaClient provider

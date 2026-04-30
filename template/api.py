@@ -1,5 +1,5 @@
 import httpx
-from httpx_sse import connect_sse
+from httpx_sse import EventSource
 import json
 
 def stream_analysis_sync(resume_bytes: bytes, filename: str, content_type: str, jd_input: str):
@@ -16,7 +16,18 @@ def stream_analysis_sync(resume_bytes: bytes, filename: str, content_type: str, 
     timeout = httpx.Timeout(10.0, read=300.0)
     
     with httpx.Client(timeout=timeout) as client:
-        with connect_sse(client, "POST", url, data=data, files=files) as event_source:
+        with client.stream("POST", url, data=data, files=files) as response:
+            content_type_header = response.headers.get("content-type", "")
+            if response.status_code != 200 or "text/event-stream" not in content_type_header:
+                response.read()
+                try:
+                    error_data = response.json()
+                    detail = error_data.get("detail", response.text)
+                except Exception:
+                    detail = response.text
+                raise Exception(detail)
+                
+            event_source = EventSource(response)
             for sse in event_source.iter_sse():
                 if sse.event == "error":
                     # Handle backend error events gracefully
