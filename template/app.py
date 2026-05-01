@@ -512,11 +512,7 @@ def render_results_view():
 
     edits_html = ""
     for i, edit in enumerate(grading_data.get("top_3_edits", []), 1):
-        trace = edit.get("traceability", "")
-        trace_class = "trace-supported"
-        if "missing" in trace: trace_class = "trace-missing"
-        elif "rephrase" in trace: trace_class = "trace-rephrase"
-        edits_html += f'<div class="edit-card"><div style="color: #64ffda; font-size: 0.8rem; margin-bottom: 0.5rem;">EDIT {i} • {edit.get("section", "GENERAL").upper()} SECTION</div><div style="margin-bottom: 0.8rem;">{edit.get("suggestion", "")}</div><span class="traceability-tag {trace_class}">{trace}</span></div>'
+        edits_html += f'<div class="edit-card"><div style="color: #64ffda; font-size: 0.8rem; margin-bottom: 0.5rem;">EDIT {i} • {edit.get("section", "GENERAL").upper()} SECTION</div><div style="margin-bottom: 0.8rem;">{edit.get("suggestion", "")}</div></div>'
 
     html = f"""
     <div class="header">
