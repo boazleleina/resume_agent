@@ -186,6 +186,9 @@ async def _analyze_stream(
       done        → signals stream end
       error       → emitted on any failure (stream then closes)
     """
+    # Step 0: Stream the raw JD text to the frontend for contextual highlighting
+    yield _sse("jd_text", {"text": clean_jd})
+
     # Step 1: Resume extraction
     try:
         resume = await extract_resume_facts(resume_text)
