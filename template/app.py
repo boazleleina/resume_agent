@@ -452,6 +452,7 @@ def render_loading_view():
         resume_data = None
         match_data = None
         grading_data = None
+        jd_text = ""
 
         for event_obj in stream_analysis_sync(
             st.session_state.uploaded_file_bytes,
@@ -462,7 +463,9 @@ def render_loading_view():
             event = event_obj["event"]
             data = event_obj["data"]
 
-            if event == "resume":
+            if event == "jd_text":
+                jd_text = data.get("text", "")
+            elif event == "resume":
                 resume_data = data
             elif event == "skill_match":
                 match_data = data
@@ -474,6 +477,7 @@ def render_loading_view():
         st.session_state.resume_data = resume_data
         st.session_state.match_data = match_data
         st.session_state.grading_data = grading_data
+        st.session_state.jd_text = jd_text
         st.session_state.app_state = "results"
         st.rerun()
 
@@ -498,17 +502,61 @@ def render_loading_view():
 
 
 def render_results_view():
+    import re
+    import html
+    
     resume_data  = st.session_state.resume_data  or {}
     match_data   = st.session_state.match_data   or {}
     grading_data = st.session_state.grading_data or {}
+    jd_text      = st.session_state.get("jd_text", "")
 
     match_score = grading_data.get("match_score", 0)
     angle       = grading_data.get("strongest_angle", "No angle generated.")
     
     gaps_html = "".join(f'<div style="padding: 0.5rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);"><strong>• {g}</strong></div>' for g in grading_data.get("honest_gaps", []))
-    matched_html = "".join(f'<span class="skill-tag skill-matched">{s}</span>' for s in match_data.get("matched", []))
+    
+    matched_skills = match_data.get("matched", [])
     missing_skills = match_data.get("missing_tech", []) + match_data.get("missing_required", [])
-    missing_html = "".join(f'<span class="skill-tag skill-missing">{s}</span>' for s in missing_skills)
+
+    matched_skills_sorted = sorted(matched_skills, key=len, reverse=True)
+    missing_skills_sorted = sorted(missing_skills, key=len, reverse=True)
+
+    safe_jd = html.escape(jd_text)
+    replacements = {}
+    counter = 0
+
+    for m in matched_skills_sorted:
+        if not m: continue
+        pattern = re.compile(r'(?i)(?<![a-zA-Z0-9])(' + re.escape(html.escape(m)) + r')(?![a-zA-Z0-9])')
+        def rep_match(match):
+            nonlocal counter
+            ph = f"___PLACEHOLDER_{counter}___"
+            replacements[ph] = f'<span style="color: #4caf50; font-weight: bold; background: rgba(76, 175, 80, 0.15); padding: 0 4px; border-radius: 4px;">{match.group(1)}</span>'
+            counter += 1
+            return ph
+        safe_jd = pattern.sub(rep_match, safe_jd)
+
+    for m in missing_skills_sorted:
+        if not m: continue
+        pattern = re.compile(r'(?i)(?<![a-zA-Z0-9])(' + re.escape(html.escape(m)) + r')(?![a-zA-Z0-9])')
+        def rep_miss(match):
+            nonlocal counter
+            ph = f"___PLACEHOLDER_{counter}___"
+            replacements[ph] = f'<span style="color: #f44336; font-weight: bold; background: rgba(244, 67, 54, 0.15); padding: 0 4px; border-radius: 4px;">{match.group(1)}</span>'
+            counter += 1
+            return ph
+        safe_jd = pattern.sub(rep_miss, safe_jd)
+
+    for ph, tag in replacements.items():
+        safe_jd = safe_jd.replace(ph, tag)
+
+    skills_analysis_html = f"""
+    <div style="margin-bottom: 1rem; display: flex; gap: 1.5rem; font-size: 0.95rem; font-weight: 500;">
+        <div style="display: flex; align-items: center; gap: 0.5rem;"><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#4caf50; box-shadow: 0 0 8px #4caf50;"></span> Matched Skills</div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;"><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#f44336; box-shadow: 0 0 8px #f44336;"></span> Missing Skills</div>
+    </div>
+    <div style="max-height: 400px; overflow-y: auto; background: rgba(255, 255, 255, 0.02); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); white-space: pre-wrap; font-size: 0.95rem; line-height: 1.7; color: #e8e9f3;">{safe_jd}</div>
+    """
 
     edits_html = ""
     for i, edit in enumerate(grading_data.get("top_3_edits", []), 1):
@@ -533,14 +581,7 @@ def render_results_view():
 
             <div class="card">
                 <h3 class="card-title">📊 Skills Analysis</h3>
-                <div style="margin: 1rem 0;">
-                    <h4 style="color:#4caf50;margin-bottom:0.5rem;">✅ Matched Skills</h4>
-                    <div class="skills-grid">{matched_html}</div>
-                </div>
-                <div style="margin: 1rem 0;">
-                    <h4 style="color:#f44336;margin-bottom:0.5rem;">❌ Missing Skills</h4>
-                    <div class="skills-grid">{missing_html}</div>
-                </div>
+                {skills_analysis_html}
             </div>
 
             <div class="card">
