@@ -558,9 +558,7 @@ def render_results_view():
     <div style="max-height: 400px; overflow-y: auto; background: rgba(255, 255, 255, 0.02); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); white-space: pre-wrap; font-size: 0.95rem; line-height: 1.7; color: #e8e9f3;">{safe_jd}</div>
     """
 
-    edits_html = ""
-    for i, edit in enumerate(grading_data.get("top_3_edits", []), 1):
-        edits_html += f'<div class="edit-card"><div style="color: #64ffda; font-size: 0.8rem; margin-bottom: 0.5rem;">EDIT {i} • {edit.get("section", "GENERAL").upper()} SECTION</div><div style="margin-bottom: 0.8rem;">{edit.get("suggestion", "")}</div></div>'
+
 
     html = f"""
     <div class="header">
@@ -588,22 +586,55 @@ def render_results_view():
                 <h3 class="card-title">⚠️ Areas for Improvement</h3>
                 <div>{gaps_html}</div>
             </div>
-        </div>
-
-        <div class="card" style="margin-top:2rem;">
-            <h3 class="card-title">📝 Top 3 Recommended Edits</h3>
-            {edits_html}
-        </div>
-    </div>
+        </div> <!-- Close results-grid -->
+    </div> <!-- Close main -->
     """
     st.markdown("\n".join(l for l in html.split("\n") if l.strip()), unsafe_allow_html=True)
+
+    # 📝 Top 3 Recommended Edits Interactive Form
+    st.markdown('<div class="main" style="padding-top:2rem;">', unsafe_allow_html=True)
     
-    st.markdown('<div class="main" style="padding-top:0;">', unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        if st.button("⬅️ Analyze Another Resume", type="primary", use_container_width=True):
+    col_title, col_reject = st.columns([5, 1])
+    with col_title:
+        st.markdown('<h3 style="margin-bottom:1rem; color: #e8e9f3;">📝 Top 3 Recommended Edits</h3>', unsafe_allow_html=True)
+    with col_reject:
+        def reject_all():
+            for i in range(1, 4):
+                st.session_state[f"edit_{i}"] = False
+        st.button("Reject All", on_click=reject_all, use_container_width=True)
+
+    approved_edits = []
+    
+    # Place edits side-by-side in 3 columns (making them square and shorter width)
+    edit_cols = st.columns(3)
+    for i, edit in enumerate(grading_data.get("top_3_edits", []), 1):
+        suggestion = edit.get("suggestion", "")
+        
+        with edit_cols[i - 1]:
+            # The text container
+            st.markdown(f'<div class="edit-card" style="margin-bottom: 0.5rem; height: 180px; overflow-y: auto;"><div style="color: #64ffda; font-size: 0.8rem; margin-bottom: 0.5rem;">EDIT {i} • {edit.get("section", "GENERAL").upper()} SECTION</div><div style="margin-bottom: 0; font-size: 0.9rem;">{suggestion}</div></div>', unsafe_allow_html=True)
+            
+            # Sub-columns to put the approve checkbox on the right side
+            _, col_check = st.columns([3, 2])
+            with col_check:
+                if f"edit_{i}" not in st.session_state:
+                    st.session_state[f"edit_{i}"] = True
+                checked = st.checkbox("Approve", key=f"edit_{i}")
+                if checked:
+                    approved_edits.append(suggestion)
+
+    st.markdown('<br>', unsafe_allow_html=True)
+    btn_disabled = len(approved_edits) == 0
+    
+    col_apply, col_analyze = st.columns(2)
+    with col_apply:
+        if st.button("✨ Apply Edits & Generate PDF", type="primary", use_container_width=True, disabled=btn_disabled):
+            st.toast("Backend PDF Generation not yet implemented!")
+    with col_analyze:
+        if st.button("⬅️ Analyze Another Resume", use_container_width=True):
             st.session_state.app_state = "input"
             st.rerun()
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ── Router ─────────────────────────────────────────────
