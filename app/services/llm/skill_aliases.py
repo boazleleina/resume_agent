@@ -1,43 +1,31 @@
 """
 Skill name normalization for match computation.
 
-The alias map catches ~80% of false negatives from trivial formatting
-differences (Node.js vs NodeJS, Postgres vs PostgreSQL). For the
-remaining ~20% (semantic synonyms like "machine learning" ≈ "ML"),
-upgrade to sentence-transformers cosine similarity.
+FROZEN MAP — only ambiguous abbreviations belong here. Short tokens like
+"tf" (TensorFlow vs Terraform) or "js" are exactly where the semantic
+matcher (Layer 3, matching._semantic_match) is weakest, so resolving them
+deterministically at Layer 0 removes ambiguity before the LLM sees them.
+
+Do NOT add spelled-out synonyms ("postgres" -> "postgresql", "amazon web
+services" -> "aws") — fuzzy matching and the LLM semantic layer handle those.
 """
 import re
 
 SKILL_ALIASES = {
-    "postgres": "postgresql",
-    "node": "node.js",
-    "nodejs": "node.js",
-    "react.js": "react",
-    "reactjs": "react",
-    "vue.js": "vue",
-    "vuejs": "vue",
-    "next.js": "nextjs",
-    "amazon web services": "aws",
-    "google cloud platform": "gcp",
-    "google cloud": "gcp",
+    "k8s": "kubernetes",
     "ml": "machine learning",
     "dl": "deep learning",
     "nlp": "natural language processing",
     "llm": "large language model",
     "llms": "large language model",
-    "k8s": "kubernetes",
-    "tf": "terraform",
     "js": "javascript",
     "ts": "typescript",
     "py": "python",
-    "fast api": "fastapi",
-    "ci/cd": "ci cd",
-    "ci cd": "ci cd",
-    "mongo": "mongodb",
+    "tf": "terraform",
+    "golang": "go",
+    "c sharp": "c#",
     "dot net": ".net",
     "dotnet": ".net",
-    "c sharp": "c#",
-    "golang": "go",
 }
 
 

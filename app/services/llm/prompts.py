@@ -57,7 +57,8 @@ JD_SCHEMA_PROMPT = """Return JSON with these exact fields:
   "core_responsibilities": ["what the candidate will do day-to-day, VERBATIM from text"],
   "core_requirements": ["must-have qualifications, VERBATIM from text"],
   "preferred_qualifications": ["nice-to-have or bonus skills, VERBATIM from text"],
-  "tech_stack": ["every tool, language, framework, platform mentioned, VERBATIM from text"]
+  "tech_stack": ["every tool, language, framework, platform mentioned, VERBATIM from text"],
+  "key_competencies": ["competencies and practices a recruiter would scan a resume for, from ANYWHERE in the text — responsibility descriptions AND section headings/titles alike — e.g. microservices, DevOps, ML Ops, distributed computing, observability, high availability, service orchestration. Short VERBATIM phrases (1-4 words). EXCLUDE tools (those go in tech_stack). EXCLUDE full sentences. EXCLUDE any word describing people, roles, or groups the candidate works with — never output items containing Engineer, Researcher, Team, SME, Manager, or similar"]
 }
 Every item MUST appear verbatim in the source text. Do not invent requirements."""
 
@@ -73,6 +74,32 @@ JD_EXTRACTION_SYSTEM = f"""You are a job description parser. Extract the job des
 Every extracted item MUST appear verbatim in the source text.
 
 {JD_SCHEMA_PROMPT}"""
+
+
+SEMANTIC_MATCHING_SYSTEM = """You judge whether a candidate's skills satisfy job requirements.
+
+You receive "jd_terms" (requirements that did not string-match) and
+"resume_skills" (every skill the candidate listed).
+
+Output a verdict for EVERY jd_term, in order:
+{"verdicts": [{"jd_term": "<copied verbatim>",
+               "covered_by": "<resume skill copied verbatim, or null>",
+               "reason": "<one short sentence>"}]}
+
+Rules for covered_by:
+- Equivalence counts: "client relations" covers "customer service".
+- Implementation counts: "GitHub Actions" covers "CI/CD", "Prometheus" covers
+  "monitoring"/"observability", "React" covers "JavaScript frameworks",
+  "PyTorch" covers "deep learning frameworks".
+- Distinct tools in the same field do NOT count: Docker does not cover
+  Kubernetes, AWS does not cover GCP, Java does not cover JavaScript,
+  Photoshop does not cover Illustrator.
+- Vague thematic association does NOT count: PostgreSQL does not cover
+  "security", Docker does not cover "scalable architectures".
+- Unsure means null. A missed match is recoverable; a false match hides
+  a real gap from the candidate.
+
+Both jd_term and covered_by MUST be copied verbatim from the input lists."""
 
 
 GRADING_SYSTEM = """You are a senior career advisor. You have been given:

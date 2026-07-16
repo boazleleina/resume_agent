@@ -143,8 +143,8 @@ async def analyze(
     except LLMServiceException as e:
         raise HTTPException(status_code=502, detail=f"LLM extraction failed: {str(e)}")
 
-    # --- Step 4: Compute deterministic skill match ---
-    skill_match = compute_skill_match(resume, jd)
+    # --- Step 4: Compute skill match (exact/fuzzy + LLM semantic) ---
+    skill_match = await compute_skill_match(resume, jd)
 
     # --- Step 5: Grade and recommend (deep reasoning, ~60-120s) ---
     try:
@@ -205,8 +205,8 @@ async def _analyze_stream(
         yield _sse("error", {"step": "jd", "detail": str(e)})
         return
 
-    # Step 3: Skill match (deterministic, instant)
-    skill_match = compute_skill_match(resume, jd)
+    # Step 3: Skill match (exact/fuzzy + LLM semantic, ~2-5s)
+    skill_match = await compute_skill_match(resume, jd)
     yield _sse("skill_match", skill_match)
 
     # Step 4: Grading

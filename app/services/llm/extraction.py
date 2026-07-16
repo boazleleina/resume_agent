@@ -11,6 +11,7 @@ import logging
 
 from pydantic import ValidationError
 
+from app.config import LLM_EXTRACTION_MODEL
 from app.domain.jd_models import JobDescriptionSchema
 from app.domain.resume_models import CanonicalResume
 
@@ -30,7 +31,8 @@ async def extract_resume_facts(raw_text: str) -> CanonicalResume:
     asking the LLM to echo it — saves ~1000 tokens per call. VERBATIM
     enforcement is handled by CanonicalResume's model_validator.
     """
-    key = cache_key("resume", raw_text)
+    # Prompt text is part of the key so prompt iteration invalidates old entries
+    key = cache_key("resume", LLM_EXTRACTION_MODEL, RESUME_EXTRACTION_SYSTEM, raw_text)
     if cached := cache_get(key):
         return cached
 
@@ -61,7 +63,7 @@ async def extract_jd_facts(clean_jd: str) -> JobDescriptionSchema:
     appear (case-insensitive) in the source text. Invented items are
     stripped and logged, not raised — the pipeline continues with clean data.
     """
-    key = cache_key("jd", clean_jd)
+    key = cache_key("jd", LLM_EXTRACTION_MODEL, JD_EXTRACTION_SYSTEM, clean_jd)
     if cached := cache_get(key):
         return cached
 
@@ -84,7 +86,7 @@ def _apply_jd_hallucination_guard(jd: JobDescriptionSchema, source_text: str) ->
     """Mutates jd in place, stripping any extracted items not in source."""
     source_lower = source_text.lower()
 
-    for field_name in ("tech_stack", "core_requirements", "preferred_qualifications"):
+    for field_name in ("tech_stack", "core_requirements", "preferred_qualifications", "key_competencies"):
         items = getattr(jd, field_name)
         kept = [s for s in items if s.lower() in source_lower]
         dropped = [s for s in items if s.lower() not in source_lower]
@@ -94,3 +96,26 @@ def _apply_jd_hallucination_guard(jd: JobDescriptionSchema, source_text: str) ->
                 f"stripped {len(dropped)} of {len(items)} items: {dropped}"
             )
         setattr(jd, field_name, kept)
+
+    _strip_people_terms(jd)
+
+
+# People/role/team words the extractor keeps mislabeling as competencies
+# despite prompt rules — a resume can't "match" a collaborator group.
+_PEOPLE_WORDS = {
+    "engineer", "engineers", "researcher", "researchers", "team", "teams",
+    "sme", "smes", "manager", "managers", "stakeholder", "stakeholders",
+    "designer", "designers", "analyst", "analysts", "scientist", "scientists",
+    "developer", "developers", "customer", "customers", "client", "clients",
+}
+
+
+def _strip_people_terms(jd: JobDescriptionSchema) -> None:
+    """Drop key_competencies naming people/roles/teams rather than practices."""
+    kept, dropped = [], []
+    for item in jd.key_competencies:
+        words = {w.strip("().,") for w in item.lower().split()}
+        (dropped if words & _PEOPLE_WORDS else kept).append(item)
+    if dropped:
+        logger.info(f"Competency people-filter dropped: {dropped}")
+    jd.key_competencies = kept
