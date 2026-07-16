@@ -3,6 +3,7 @@ import logging
 
 from pydantic import ValidationError
 
+from app.config import LLM_GRADING_MODEL, LLM_GRADING_THINK
 from app.domain.grading_models import GradingResult
 from app.domain.resume_models import CanonicalResume
 
@@ -19,9 +20,13 @@ async def grade_and_recommend(
     clean_jd: str,
     skill_match: dict,
 ) -> GradingResult:
-    """Grade resume/JD match and propose edits. think=True (deep reasoning)."""
+    """Grade resume/JD match and propose edits on the large grading model.
+    Thinking mode is off by default (LLM_GRADING_THINK) — it adds 1-2 min/call."""
     key = cache_key(
         "grade",
+        LLM_GRADING_MODEL,
+        str(LLM_GRADING_THINK),
+        GRADING_SYSTEM,
         clean_jd,
         resume.model_dump_json(),
         json.dumps(skill_match, sort_keys=True),
@@ -31,7 +36,9 @@ async def grade_and_recommend(
 
     resume_context = _build_resume_context(resume)
     user_prompt = _build_grading_user_prompt(resume_context, clean_jd, skill_match)
-    llm_output = await get_client().prompt_model(GRADING_SYSTEM, user_prompt, think=True)
+    llm_output = await get_client().prompt_model(
+        GRADING_SYSTEM, user_prompt, think=LLM_GRADING_THINK, model_role="grading"
+    )
 
     try:
         grading = GradingResult.model_validate_json(llm_output)
@@ -87,9 +94,11 @@ Pre-computed skill match:
 - Tech stack match: {skill_match['tech_match_pct']}%
 - Matched skills (confirmed present — do NOT list these as gaps): {skill_match['matched']}
 - Fuzzy-matched skills (close enough — do NOT list these as gaps): {skill_match.get('fuzzy_matched', [])}
+- Semantically-matched skills (equivalent or implied by resume skills — do NOT list these as gaps): {skill_match.get('semantic_matched', [])}
 - Missing required: {skill_match['missing_required']}
 - Missing tech stack: {skill_match['missing_tech']}
-- Missing preferred: {skill_match['missing_preferred']}{prose_section}
+- Missing preferred: {skill_match['missing_preferred']}
+- Missing competencies (practices recruiters scan for, e.g. microservices, DevOps): {skill_match.get('missing_competencies', [])}{prose_section}
 
 Analyze and grade this candidate."""
 

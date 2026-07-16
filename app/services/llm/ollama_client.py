@@ -11,7 +11,13 @@ import re
 
 import httpx
 
-from app.config import LLM_EXTRACTION_MODEL, LLM_GRADING_MODEL, OLLAMA_CHAT_URL
+from app.config import (
+    LLM_EXTRACTION_MODEL,
+    LLM_GRADING_MODEL,
+    OLLAMA_CHAT_URL,
+    OLLAMA_KEEP_ALIVE,
+    OLLAMA_NUM_CTX,
+)
 from .base import LLMBase
 from .exceptions import LLMServiceException
 
@@ -19,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 2.0
-CTX_WINDOW = 8192
-CTX_WARNING_THRESHOLD = 6000
+CTX_WINDOW = OLLAMA_NUM_CTX
+CTX_WARNING_THRESHOLD = int(CTX_WINDOW * 0.75)
 
 
 class OllamaClient(LLMBase):
@@ -29,8 +35,9 @@ class OllamaClient(LLMBase):
         system_prompt: str,
         user_prompt: str,
         think: bool = False,
+        model_role: str = "extraction",
     ) -> str:
-        model = LLM_GRADING_MODEL if think else LLM_EXTRACTION_MODEL
+        model = LLM_GRADING_MODEL if model_role == "grading" else LLM_EXTRACTION_MODEL
         payload = {
             "model": model,
             "messages": [
@@ -39,6 +46,7 @@ class OllamaClient(LLMBase):
             ],
             "format": "json",
             "stream": False,
+            "keep_alive": OLLAMA_KEEP_ALIVE,
             "options": {
                 "temperature": 0.0,
                 "num_ctx": CTX_WINDOW,
@@ -48,7 +56,7 @@ class OllamaClient(LLMBase):
 
         prompt_chars = len(system_prompt) + len(user_prompt)
         estimated_tokens = len(system_prompt + user_prompt) // 4
-        timeout = 180.0 if not think else 600.0
+        timeout = 600.0 if (think or model_role == "grading") else 180.0
 
         if estimated_tokens > CTX_WARNING_THRESHOLD:
             logger.warning(

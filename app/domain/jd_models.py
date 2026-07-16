@@ -26,6 +26,18 @@ class JobDescriptionSchema(BaseModel):
     
     # Technology Mapping
     tech_stack: List[str] = Field(
-        default_factory=list, 
+        default_factory=list,
         description="A flat list of explicit tools, software, algorithms, or coding languages (e.g., Python, Ansys HFSS, React) mentioned anywhere in the posting."
+    )
+
+    # Recruiter-scan competencies
+    key_competencies: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Competencies and practices a recruiter would scan a resume for, "
+            "mentioned ANYWHERE in the posting including responsibilities prose "
+            "(e.g., microservices, DevOps, ML Ops, distributed computing, "
+            "observability, service orchestration). Short verbatim phrases, "
+            "not tools (tools go in tech_stack) and not full sentences."
+        )
     )
