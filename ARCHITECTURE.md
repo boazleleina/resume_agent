@@ -10,7 +10,7 @@ Pure business logic, custom exceptions, and core data models — independent of 
 - `validation.py`: Magic-byte file validation (prevents disguised executables from reaching parsers).
 - `classification.py`: Heuristic scoring to reject non-resume documents (cover letters, invoices).
 - `resume_models.py`: Pydantic canonical resume schema with VERBATIM/MUTABLE field annotations and tiered hallucination enforcement via `model_validator`. Uses `object.__setattr__` for in-validator mutations to avoid `validate_assignment` recursion.
-- `jd_models.py`: Pydantic schema for structured JD extraction (`core_requirements`, `preferred_qualifications`, `tech_stack`).
+- `jd_models.py`: Pydantic schema for structured JD extraction (`core_requirements`, `preferred_qualifications`, `tech_stack`, `key_competencies` — recruiter-scan concepts pulled from prose responsibilities and headings).
 - `jd_parsing.py`: 4-layer JD extraction pipeline (JSON-LD → Trafilatura recall → BS4 heading walker → merge/dedupe). Raises `ScrapingBlockedException` when content cannot be extracted.
 
 ### 2. `parsers/`
@@ -27,23 +27,25 @@ Orchestration layer bridging domain logic and the API.
 Modular LLM pipeline. Designed so swapping providers requires adding one file and one line — no changes to extraction or grading logic.
 
 #### Provider abstraction
-- `base.py`: `LLMBase` ABC defining `prompt_model(system, user, think=False) → str`. All providers implement this interface.
-- `ollama_client.py`: `OllamaClient(LLMBase)`. Handles Ollama-specific payload shape, retries, timeouts, `<think>` block stripping, and structured logging. Selects `LLM_EXTRACTION_MODEL` or `LLM_GRADING_MODEL` based on the `think` flag.
+- `base.py`: `LLMBase` ABC defining `prompt_model(system, user, think=False, model_role="extraction") → str`. All providers implement this interface. `model_role` selects the model; `think` independently toggles reasoning mode — decoupled so the large model can run without thinking (fast) or with it (deep, minutes slower).
+- `ollama_client.py`: `OllamaClient(LLMBase)`. Handles Ollama-specific payload shape, retries, timeouts, keep-alive, `<think>` block stripping, and structured logging. Selects `LLM_EXTRACTION_MODEL` or `LLM_GRADING_MODEL` based on `model_role`.
 - `factory.py`: `_REGISTRY` maps provider name strings to classes. `get_client()` reads `LLM_PROVIDER` from config and returns the right instance. Adding a provider = one new file + one `_REGISTRY` entry.
 
 #### Pipeline steps
-- `extraction.py`: Step 1 — fast structured extraction (`think=False`, uses `LLM_EXTRACTION_MODEL`). Injects `raw_text` after LLM parse (not in prompt) to save ~1000 tokens per call.
-- `matching.py`: Step 2 — deterministic, zero-LLM skill matching. Three layers: exact match → fuzzy match (`rapidfuzz`, threshold 85) → (semantic embeddings, planned). Prose requirements (>5 words) bypass string matching and go directly to the grader.
-- `grading.py`: Step 3 — deep reasoning (`think=True`, uses `LLM_GRADING_MODEL`). Post-processes traceability tags: downgrades unsupported "source text" claims and catches suggestions naming skills already present in the resume.
-- `prompts.py`: All prompt strings in one file. Prompt changes never touch pipeline logic.
-- `skill_aliases.py`: Alias map + `expand_skill()` for compound normalization (`"AWS (EC2, S3)"` → `"aws"`, `"JavaScript/TypeScript"` → `["javascript", "typescript"]`).
-- `cache.py`: Two-layer cache — in-memory L1 (zero-latency, lost on restart) backed by `shelve` L2 (persists to `data/llm_cache`, 7-day TTL). Each pipeline step caches independently by SHA256 of its inputs.
+- `extraction.py`: Step 1 — fast structured extraction (`think=False`). Injects `raw_text` after LLM parse (not in prompt) to save ~1000 tokens per call. JD extraction runs a verbatim hallucination guard plus a deterministic people-filter that strips role/team terms mislabeled as competencies.
+- `matching.py`: Step 2 — three-layer skill matching (async): exact match → fuzzy match (`rapidfuzz`, threshold 85) → LLM semantic adjudication. Layer 3 asks the LLM for a verdict on EVERY unmatched JD term (`covered_by: <resume skill> | null`); forced per-term enumeration prevents both lazy empty output and volunteered false matches. Every verdict is validated verbatim against the input lists (hallucinated matches structurally impossible) and the layer degrades to fuzzy-only on any LLM failure. Prose requirements (>5 words) bypass string matching and go directly to the grader.
+- `grading.py`: Step 3 — analysis on `LLM_GRADING_MODEL` (thinking off by default; `LLM_GRADING_THINK=true` re-enables at 1–2 min/call). Post-processes traceability tags: downgrades unsupported "source text" claims and catches suggestions naming skills already present in the resume.
+- `prompts.py`: All prompt strings in one file. Prompt changes never touch pipeline logic. Prompt text is part of every cache key, so prompt iteration self-invalidates stale entries.
+- `skill_aliases.py`: FROZEN abbreviation map (`k8s`, `tf`, `js`, …) + `expand_skill()` for compound normalization (`"AWS (EC2, S3)"` → `"aws"`, `"JavaScript/TypeScript"` → `["javascript", "typescript"]`). No longer a coverage mechanism — only ambiguous short tokens belong here; the semantic layer handles synonyms.
+- `cache.py`: Two-layer cache — in-memory L1 (zero-latency, lost on restart) backed by `shelve` L2 (persists to `data/llm_cache`, 7-day TTL). Each pipeline step caches independently by SHA256 of its inputs, model name, thinking flag, and system prompt.
 
 ### 5. `config.py`
 All environment-overridable settings in one place:
 - `LLM_PROVIDER` — which client class to use (default `"ollama"`)
-- `LLM_EXTRACTION_MODEL` — fast model for extraction (default `qwen3:4b`)
-- `LLM_GRADING_MODEL` — reasoning model for grading (default `qwen3:8b`)
+- `LLM_EXTRACTION_MODEL` / `LLM_GRADING_MODEL` — both default `qwen3:30b-a3b`: one resident model avoids Ollama load-thrash (18GB reloads per role switch caused multi-minute stalls), and the MoE architecture (3B active params) keeps generation fast
+- `LLM_GRADING_THINK` / `LLM_MATCHING_THINK` — reasoning mode per step (default `false`)
+- `OLLAMA_NUM_CTX` — context window (default 32768)
+- `OLLAMA_KEEP_ALIVE` — model residency between requests (default `30m`)
 - `CACHE_PATH`, `CACHE_TTL_SECONDS` — persistent cache location and TTL
 - `OLLAMA_BASE_URL` — remote Ollama server override for Docker/cloud deployments
 
@@ -74,7 +76,7 @@ graph TD
     Extraction -->|"CanonicalResume + JD"| Matching["llm/matching.py\n(Step 2: Skill matching)"]
     Matching -->|"skill_match dict"| Grading["llm/grading.py\n(Step 3: Grading + edits)"]
 
-    Extraction & Grading -->|"prompt_model()"| Factory["llm/factory.py\nget_client()"]
+    Extraction & Matching & Grading -->|"prompt_model()"| Factory["llm/factory.py\nget_client()"]
     Factory --> OllamaClient["OllamaClient\n(implements LLMBase)"]
 
     Grading -->|"GradingResult"| Routes
@@ -93,8 +95,8 @@ Every LLM output is validated at multiple layers:
 
 | Layer | Mechanism |
 |---|---|
-| Extraction | VERBATIM validator strips invented skills, companies, metrics not found in `raw_text` |
-| Skill matching | Deterministic set operations — no LLM involvement, no hallucination risk |
+| Extraction | VERBATIM validator strips invented skills, companies, metrics not found in `raw_text`; JD competencies also pass a deterministic people-filter |
+| Skill matching | Layers 1–2 are deterministic set operations. Layer 3 (LLM) validates every verdict verbatim against the input lists — a match naming a term that wasn't in the inputs is discarded and logged, making hallucinated matches structurally impossible |
 | Grading prompt | Matched skills explicitly labeled "do NOT list as gaps" |
 | Traceability enforcement | Post-processing re-tags edits that name skills already in the resume |
 | Traceability tags | Every edit suggestion must carry one of 5 tags (see below) |
@@ -110,9 +112,6 @@ Every LLM output is validated at multiple layers:
 
 ## Roadmap
 
-### Semantic similarity matching (v2)
-Fuzzy matching (current) catches string variants. Semantic embeddings catch concept-level matches (`"cloud infrastructure"` ≈ `"AWS/GCP/Azure"`). Plan: `nomic-embed-text` via Ollama (no new dependency — already running).
-
 ### PDF generation (v2)
 `services/pdf_generator.py` producing an ATS-optimized PDF from the Canonical JSON + approved edits. Stateless by design.
 
@@ -121,7 +120,8 @@ Fuzzy matching (current) catches string variants. Semantic embeddings catch conc
 2. Parse (done)
 3. Normalize (done)
 4. JD Resolution (done)
-5. Grade (done)
-6. Recommend (done)
-7. Human Review (pending frontend)
-8. Regenerate (pending v2)
+5. Match — exact/fuzzy/LLM-semantic (done, v0.5)
+6. Grade (done)
+7. Recommend (done)
+8. Human Review (pending frontend)
+9. Regenerate (pending v2)

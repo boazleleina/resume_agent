@@ -6,13 +6,13 @@ This document outlines the software engineering principles, design patterns, des
 
 The application is designed to run locally, prioritizing privacy and avoiding expensive cloud LLM API costs.
 
-*   **Operating System**: macOS
+*   **Operating System**: macOS (Apple Silicon, 64GB unified memory)
 *   **AI Backend**: Local Ollama (GPU-accelerated)
 *   **The Constraint**: Running LLMs locally places immense pressure on system memory (RAM).
-*   **The Multi-Model Solution**: 
-    To balance speed and capability on a local Mac, the pipeline was split into a **Multi-Model Architecture**:
-    *   **Qwen 3 (4B)**: Used exclusively for data extraction (`think=False`). It acts as a deterministic "robot" to rapidly pull facts from text. Its smaller size allows it to process large context windows quickly without locking up the system.
-    *   **Qwen 3 (8B)**: Used exclusively for grading and recommendations (`think=True`). It acts as the "strategist", utilizing its deeper reasoning capabilities. Reserving the heavy model only for the final, synthesized step prevents the Mac from overheating or running out of memory during the initial parsing phases.
+*   **The Single-Model Solution (v0.5)**:
+    The original 16GB machine forced a multi-model split (Qwen3 4B for extraction, 8B for grading). The 64GB upgrade allowed a redesign — and the redesign taught two lessons:
+    *   **One resident model beats two specialized ones.** All pipeline steps now use **Qwen3 30B-A3B**, a Mixture-of-Experts model with only 3B active parameters per token: 32B-class reasoning at small-model generation speed (~93 tok/s). When extraction and grading used *different* models, Ollama evicted and reloaded 18GB of weights on every role switch, causing multi-minute request stalls. `OLLAMA_KEEP_ALIVE=30m` keeps the single model resident between requests. The `LLM_EXTRACTION_MODEL` / `LLM_GRADING_MODEL` split remains in config for machines that need smaller models.
+    *   **Thinking mode is a per-step decision, not a model property.** Hidden reasoning tokens (invisible in Ollama's logged `eval_count`) added 1.5–2 minutes per grading call. `model_role` now selects the model while `think` independently toggles reasoning — both grading and semantic matching default to thinking OFF (`LLM_GRADING_THINK` / `LLM_MATCHING_THINK`), because the 30B model without thinking outperforms the old 8B with it.
 
 ## 2. Software Engineering Principles
 
@@ -53,9 +53,10 @@ LLMs are probabilistic and prone to inventing facts. Instead of relying solely o
 *   **Decision**: Schema fields are strictly categorized as `VERBATIM` (must exist in the source document, e.g., Job Titles) or `MUTABLE` (can be rephrased, e.g., bullet points).
 *   **Implementation**: A Pydantic `@model_validator` acts as an absolute gatekeeper. It cross-references the LLM's JSON output against the immutable `raw_text` extracted from the PDF. If the LLM hallucinates a skill, the Python validator silently deletes it.
 
-### B. Deterministic Mathematical Matching
-*   **Decision**: The LLM is NOT used to calculate the skill match percentage between the Resume and the Job Description.
-*   **Implementation**: `app/services/llm/matching.py` uses deterministic set intersections and Fuzzy Matching (Levenshtein Distance) to generate a scorecard. This scorecard is then fed to the LLM during the grading phase. This prevents the LLM from struggling with counting tasks.
+### B. Hybrid Skill Matching (Deterministic Math + Constrained LLM Judgment)
+*   **Decision**: The LLM is NOT used to calculate percentages or count matches — but pure string matching cannot recognize that "GitHub Actions" satisfies a "CI/CD" requirement or that "client relations" equals "customer service". Each layer does what it is structurally best at.
+*   **Implementation**: `app/services/llm/matching.py` runs three layers. Layers 1–2 are deterministic: set intersections after alias/compound normalization, then fuzzy matching (`rapidfuzz`). Layer 3 sends only the *survivors* to the LLM, which must return a verdict for every term (`covered_by: <resume skill> | null`). Three guardrails keep Layer 3 honest: forced per-term enumeration (prevents volunteered false matches — the failure mode that produced `kubernetes ← docker` during development), verbatim subset validation (any verdict naming a term not in the inputs is discarded), and graceful degradation to fuzzy-only on any LLM failure. All arithmetic on the combined result stays in Python.
+*   **Why per-term verdicts**: a free-form "list the matches" prompt made small models overfire (false positives) and the large model underfire (empty lists). Requiring an explicit ruling on every term fixed both without needing thinking mode — measured at ~5–8s per analysis versus ~103s with thinking enabled.
 
 ### C. Streaming UX (Server-Sent Events)
 *   **Decision**: Running sequential LLM tasks takes 30-60 seconds locally. Waiting for a single HTTP response creates poor UX.
@@ -80,4 +81,4 @@ LLMs are probabilistic and prone to inventing facts. Instead of relying solely o
 *   **Implementation**: A two-layer caching system (`cache.py`). 
     *   **L1 (In-Memory)**: Instant access for immediate page reloads.
     *   **L2 (Disk - `shelve`)**: Persists across server restarts.
-    *   Uses SHA-256 hashing of combined prompts to guarantee absolute cache-key uniqueness. Data older than the configured TTL (default 7 days) is automatically evicted.
+    *   Uses SHA-256 hashing of the inputs **plus the model name, thinking flag, and system prompt text** — so swapping models or iterating on a prompt self-invalidates stale entries instead of silently serving results generated by the old configuration. Data older than the configured TTL (default 7 days) is automatically evicted.
