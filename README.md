@@ -5,7 +5,7 @@ A human-in-the-loop, AI-powered agent designed to parse your resume, compare it 
 ## Tech Stack
 * **Backend:** Python + FastAPI
 * **Frontend:** Streamlit + Custom Dark Theme CSS Architecture
-* **LLM Engine:** Local Ollama (Qwen 3 8B)
+* **LLM Engine:** Local Ollama (Qwen3 30B-A3B — MoE with 3B active params, so it reasons like a 32B-class model but generates at small-model speed)
 * **Parsers:** `pdfplumber` (PDF), `python-docx` (Word)
 * **JD Extraction:** 4-layer pipeline using `trafilatura` (recall-mode) + `beautifulsoup4` (heading walker) + JSON-LD structured data
 * **Architecture:** Domain-Driven Design (DDD) & Stateless processing for clean PDF generation and accurate iteration. For a complete deep-dive, see the [System Design Document](SYSTEM_DESIGN.md).
@@ -13,7 +13,7 @@ A human-in-the-loop, AI-powered agent designed to parse your resume, compare it 
 
 ---
 
-## The 8-Stage Architecture Pipeline
+## The 9-Stage Architecture Pipeline
 
 1. **Upload:** User uploads their PDF/DOCX resume to the FastAPI backend. *Security checks run here to reject disguised malware via magic-byte validation.*
 2. **Parse:** Backend extracts pure text and layout-aware structure. *Heuristic validation rejects non-resume files (e.g., invoices) dynamically.*
@@ -21,10 +21,11 @@ A human-in-the-loop, AI-powered agent designed to parse your resume, compare it 
 4. **Job Description Resolution:** 
    - User inputs a JD via text or URL.
    - Backend runs a 4-layer extraction pipeline: JSON-LD structured data -> Trafilatura recall-mode -> BeautifulSoup heading walker -> merge & deduplicate. This ensures stacked headings and requirement lists are never dropped.
-5. **Grade:** The local Qwen 3 model compares the Canonical JSON against the JD. It outputs a strictly enforced JSON object containing: `score`, `strengths`, `weaknesses`, and `recommendations`.
-6. **Recommend:** Improvements are strictly limited to existing evidence or generic advice using Traceability Categories to prevent inventing metrics.
-7. **Human Review:** User reviews and approves/rejects proposed patches on the frontend.
-8. **Rewrite & Regenerate:** The approved patches are applied to the Canonical JSON, and a new, standardized, ATS-friendly PDF is generated statelessly.
+5. **Match:** Three-layer skill matching — exact (after alias normalization) → fuzzy (`rapidfuzz`) → **LLM semantic adjudication**. The semantic layer rules on every unmatched JD term (equivalence like "client relations" ≈ "customer service", implementation like GitHub Actions → CI/CD), works for technical and non-technical resumes alike, and validates every verdict against the input lists so hallucinated matches are structurally impossible. The JD extractor also pulls **key competencies** recruiters scan for (microservices, DevOps, ML Ops, observability) from anywhere in the posting, including prose responsibilities and headings.
+6. **Grade:** The local Qwen3 model compares the Canonical JSON against the JD and pre-computed match. It outputs a strictly enforced JSON object containing: `score`, `strengths`, `weaknesses`, and `recommendations`.
+7. **Recommend:** Improvements are strictly limited to existing evidence or generic advice using Traceability Categories to prevent inventing metrics.
+8. **Human Review:** User reviews and approves/rejects proposed patches on the frontend.
+9. **Rewrite & Regenerate:** The approved patches are applied to the Canonical JSON, and a new, standardized, ATS-friendly PDF is generated statelessly.
 
 ---
 
@@ -58,7 +59,7 @@ The codebase rests on a clear separation of concerns inside the `app/` directory
 - `app/parsers/`: Decoupled text ingestion logic (`pdfplumber` and `python-docx`) dynamically resolved via an internal registry.
 - `app/services/`: High-level operations bridging domain and integration layers (resume upload, JD resolution). 
 - `app/routes.py`: Lean API endpoints that offload core processing to the services layer.
-- `tests/`: End-to-end `pytest` coverage (25 tests) validating domain heuristics, parser flows, SSRF protections, and schema integrity.
+- `tests/`: End-to-end `pytest` coverage (40 tests) validating domain heuristics, parser flows, SSRF protections, schema integrity, and the three-layer matching pipeline (including LLM guardrails and graceful degradation).
 
 ### API Endpoints
 
@@ -93,8 +94,13 @@ resume_agent/
 │       ├── jd_service.py         # JD URL fetching & raw text cleanup
 │       ├── resume_service.py
 │       └── llm/                  # Modular 3-step LLM pipeline
-│           ├── extraction.py     # Step 1: Structured extraction
-│           ├── matching.py       # Step 2: Deterministic skill matching
+│           ├── base.py           # Provider-agnostic LLM interface
+│           ├── ollama_client.py  # Ollama implementation (retries, keep-alive)
+│           ├── factory.py        # Provider registry
+│           ├── cache.py          # Two-layer response cache (memory + shelve)
+│           ├── extraction.py     # Step 1: Structured extraction + guards
+│           ├── skill_aliases.py  # Layer 0: frozen abbreviation map (k8s, js…)
+│           ├── matching.py       # Step 2: exact → fuzzy → LLM semantic match
 │           ├── grading.py        # Step 3: Reasoning & analysis
 │           └── prompts.py        # Centralized prompt management
 ├── template/
@@ -113,7 +119,8 @@ resume_agent/
 │   │   └── test_registry.py
 │   └── services/
 │       ├── test_jd_service.py
-│       └── test_llm_matching.py  # Tests for skill normalization
+│       ├── test_extraction_guards.py # Competency people-filter tests
+│       └── test_llm_matching.py  # 3-layer matching + LLM guardrail tests
 ├── ARCHITECTURE.md
 ├── CHANGELOG.md
 ├── README.md
@@ -124,12 +131,7 @@ resume_agent/
 
 ## Roadmap & Future Enhancements
 
-### 1. Semantic Similarity Matching (v2)
-Currently, skill matching relies on a deterministic `SKILL_ALIASES` map. While effective for tech keywords, it can miss semantic synonyms.
-- **Planned**: Replace the alias map with `sentence-transformers` embeddings (~80MB model).
-- **Goal**: Compute cosine similarity between vectors to catch matches like "cross-functional leadership" ≈ "led distributed teams" without manual rules.
-
-### 2. PDF Generation (v2)
+### 1. PDF Generation (v2)
 - **Goal**: Implement `services/pdf_generator.py` to produce a finalized, ATS-optimized PDF incorporating the "Top 3 Edits." This will be stateless, using the Canonical JSON as the source.
 
 
@@ -141,10 +143,19 @@ Currently, skill matching relies on a deterministic `SKILL_ALIASES` map. While e
    ```bash
    pip install -r requirements.txt
    ```
-2. **Local LLM Setup:** Ensure [Ollama](https://ollama.ai/) is installed and the `qwen3:8b` model is pulled:
+2. **Local LLM Setup:** Ensure [Ollama](https://ollama.ai/) is installed and the `qwen3:30b-a3b` model is pulled (~19GB; needs ≥32GB unified memory — override with smaller models via env vars below):
    ```bash
-   ollama pull qwen3:8b
+   ollama pull qwen3:30b-a3b
    ```
+   Key environment variables (all optional):
+   | Variable | Default | Purpose |
+   |----------|---------|---------|
+   | `LLM_EXTRACTION_MODEL` | `qwen3:30b-a3b` | Model for extraction + semantic matching |
+   | `LLM_GRADING_MODEL` | `qwen3:30b-a3b` | Model for grading (same model by default — one resident model avoids Ollama load-thrash) |
+   | `OLLAMA_NUM_CTX` | `32768` | Context window |
+   | `OLLAMA_KEEP_ALIVE` | `30m` | Keep model resident between requests |
+   | `LLM_GRADING_THINK` | `false` | Enable reasoning mode for grading (adds 1–2 min/call) |
+   | `LLM_MATCHING_THINK` | `false` | Enable reasoning mode for semantic matching |
 3. Start the FastAPI development server:
    ```bash
    uvicorn app.main:app --reload
